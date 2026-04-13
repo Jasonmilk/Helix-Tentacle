@@ -1,0 +1,9 @@
+# 敏感配置
+.env
+.env.*
+!.env.example
+
+# 虚拟环境
+venv/
+__pycache__/
+*.pyc
