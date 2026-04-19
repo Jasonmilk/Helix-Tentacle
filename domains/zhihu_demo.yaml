@@ -1,0 +1,11 @@
+name: "知乎"
+description: "高质量原创社区"
+cookie_ref: "zhihu.txt"  # 自动从 cookies 目录加载
+
+search_sources:
+  - type: "site"
+    value: "zhihu.com"
+    weight: 1.0
+
+default_keywords:
+  - "2026"
