@@ -2,6 +2,12 @@
 
   [![中文](https://img.shields.io/badge/简体中文-README-red)](./README.zh-CN.md)
 
+[Helix Ecosystem](https://github.com/Jasonmilk) ·
+[CIS](https://github.com/CommonIntents/CIS) ·
+[CAP](https://github.com/CommonIntents/CAP) ·
+[CISS](https://github.com/CommonIntents/CISS) ·
+[CIB](https://github.com/CommonIntents/CIB)
+
 External perception and progressive information sniffing microservice for the Helix ecosystem.
 
 Tentacle is the "world perception organ" of the Helix digital lifeform. It implements **progressive information foraging** based on information foraging theory, enabling two-phase web content extraction:
