@@ -2,6 +2,12 @@
 
 [![EN](https://img.shields.io/badge/English-README-blue)](./README.md)
 
+[Helix Ecosystem](https://github.com/Jasonmilk) ·
+[CIS](https://github.com/CommonIntents/CIS) ·
+[CAP](https://github.com/CommonIntents/CAP) ·
+[CISS](https://github.com/CommonIntents/CISS) ·
+[CIB](https://github.com/CommonIntents/CIB)
+
 Helix 生态系统的外部感知与渐进式信息嗅探微服务。
 
 Tentacle 是 Helix 数字生命体的“世界感知器官”。它基于**信息觅食理论**实现了**渐进式信息觅食**，支持两阶段的网页内容提取：
