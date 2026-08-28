@@ -1,163 +1,54 @@
-# Helix-Tentacle v2.3
+# Helix-Tentacle — 通用战术武器系统（Rust 版）
 
-  [![中文](https://img.shields.io/badge/简体中文-README-red)](./README.zh-CN.md)
+> **rs 分支** ｜ **Apache 2.0** ｜ **DNA 自生长方法论 v2.0 治理**
+> **性质**：独立的、自带说明书的、多传输层的通用工具执行引擎（无状态纯净版）
 
-[Helix Ecosystem](https://github.com/Jasonmilk) ·
-[CIS](https://github.com/CommonIntents/CIS) ·
-[CAP](https://github.com/CommonIntents/CAP) ·
-[CISS](https://github.com/CommonIntents/CISS) ·
-[CIB](https://github.com/CommonIntents/CIB)
+## 定位
 
-External perception and progressive information sniffing microservice for the Helix ecosystem.
+Tentacle 是一把"刀"——独立、可组合、自带说明书（Manifest）。它接收标准化的调用请求，在安全沙箱中执行工具，返回结构化结果，然后忘记一切。**Tentacle 不是 Helix 的双手，而是全 AI Agent 社区的公共武器库。**
 
-Tentacle is the "world perception organ" of the Helix digital lifeform. It implements **progressive information foraging** based on information foraging theory, enabling two-phase web content extraction:
-1. **Low-resolution scan**: Generate document topography with keyword hit density
-2. **High-resolution extract**: Pull raw text only from high-value sections
+- **通用**：不绑定任何 Agent 框架，通过 HTTP/MCP/gRPC/STDIO 平等服务所有调用者
+- **极简**：启动 <2MB 内存，工具按需加载、用完即焚
+- **自带说明书**：每个工具携带完整 Manifest（声明与执行体分离，SHA-256 密码学绑定）
+- **身份流转**：凭证标签流转（`identity_label`），不存储任何明文凭证
+- **渐进式觅食**：信息增益评估器 + 已见熵布隆过滤器，信息饱和即止
+- **沙箱安全**：完整性校验/权限声明/运行时隔离/自动脱敏/孤儿沙箱防御
+- **共识可选**：动态共识适配（Standalone 终端确认 / Helix CAP / MCP 回调）
 
-## What's New in v2.3
+## 分支说明
 
-- **Agent-Programmable Perception**: Full `KeywordFilter` support (`include`, `exclude`, `boost`) applied consistently across search, scan, and extract.
-- **Domain & Site Configuration**: Load domain-specific defaults and restrict searches to specific sites via `--domain` and `--site`.
-- **Cookie/Session Support**: Authenticated scraping using Netscape-format cookie files.
-- **Content Quality Scoring**: Automatic quality estimation for each DOM section (purity, position, tag diversity).
-- **Multi-level Filtering**: `--filter-level` (`none`, `standard`, `strict`) to control aggressiveness of content filtering.
+| 分支 | 内容 | 状态 |
+|---|---|---|
+| **`rs`**（当前） | Rust 重构版，DNA 方法论治理 | 重构进行中 |
+| **`main`** | 早期 Python 版 | **保留为哲学历史参考**（历史永不删除，按需加载） |
 
-## Dual-mode Architecture
+## 生态对齐链
 
-Tentacle supports two running modes sharing the same core engine:
-
-### 🔌 Embedded Mode (Default)
-Run as a REST API microservice within the Helix ecosystem.
-- Used by Anaphase (Helix's prefrontal cortex)
-- Full HXR audit logging, Trace ID propagation
-- Integrated with Tuck gateway for security
-- Disables CLI interface
-
-### 🖥️ Standalone Mode
-Run as a standalone CLI tool for local development and usage.
-- Human-friendly CLI interface
-- Local logging, basic SSRF protection
-- Independent of Helix deployment
-
-## Installation
-
-```bash
-# Install from source (editable)
-pip install -e .
-
-# Or install with dev dependencies
-pip install -e ".[dev]"
+```
+Helix-Mind ← Anaphase-Helix ← Helix-Tentacle
+（记忆/认知）  （编排/执行）    （工具/武器）
 ```
 
-## Quick Start
+Tentacle 对齐 Anaphase（gRPC 契约 + 凭证标签流转 + 共识 Helix 模式），Anaphase 对齐 Mind（已完成）。对齐链是重构的硬约束。
 
-### Standalone CLI Mode
+## 四修正硬性验收（生态对齐）
 
-First enable standalone mode:
-```bash
-export TENTACLE_MODE=standalone
-```
+1. **凭证标签流转**：对接 Tuck，内存 grep 不出明文 Cookie/Token
+2. **已见熵布隆过滤器**：对接 Callosum，跨会话免重复采集
+3. **异步协程沙箱**：ARM 端侧 worker 池，10 并发 JS 工具不 OOM/CPU 过载
+4. **动态共识适配层**：Standalone/Helix/MCP 三模式，独立模式不返回 503
 
-#### Scan a URL with filtering
-```bash
-# Basic scan
-tentacle scan https://example.com --keywords "AI,Agents" --format rich
+## 文档导航
 
-# Scan with advanced filtering
-tentacle scan https://example.com \
-  --keywords "AI" \
-  --require "report" \
-  --exclude "advertisement" \
-  --boost "2025:2.0" \
-  --filter-level strict \
-  --format table
-```
+| 文档 | 路径 |
+|---|---|
+| 愿景 | `docs/VISION.md` |
+| 不可变原则 | `docs/DNA.md` |
+| 生长记录 | `docs/GROWTH.md` |
+| 当前阶段导航 | `docs/PLAN.md` |
+| 决策记录 | `docs/decisions/` |
+| 工程白皮书 v3.4 | `docs/vision/tentacle-whitepaper-v3.4.md` |
 
-#### Extract sections
-```bash
-# Extract raw text from specific sections
-tentacle extract https://example.com --sections sec_001,sec_003
-```
+---
 
-#### Search with domain and site restrictions
-```bash
-# Search the web
-tentacle search "LLM reasoning" --limit 3
-
-# Search only within specific sites
-tentacle search "AI anxiety" --site "zhihu.com,bbc.com" --limit 2
-
-# Search using a domain configuration (loads default keywords/sites)
-tentacle search "electronics" --domain trade --limit 5
-```
-
-#### Authenticated scraping (cookie support)
-```bash
-# Place cookie file in ./cookies/zhihu.txt
-tentacle scan https://www.zhihu.com/people/me --cookie zhihu.txt --format table
-```
-
-#### Interactive exploration
-```bash
-# Explore document interactively
-tentacle explore https://example.com
-```
-
-### Embedded Server Mode
-
-Start the API server:
-```bash
-# Default mode is embedded
-uvicorn tentacle.api.main:app --host 0.0.0.0 --port 8021
-```
-
-The server will be available at `http://localhost:8021`
-
-#### API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/v1/tentacle/scan` | Phase 1: Scan URL to get topography |
-| POST | `/v1/tentacle/extract` | Phase 2: Extract raw text from sections |
-| POST | `/v1/tentacle/search` | Web search proxy |
-| POST | `/v1/tentacle/feedback` | Submit feedback for model evolution |
-| GET | `/health` | Health check |
-| GET | `/metrics` | Prometheus metrics (optional) |
-
-Interactive API docs are available at `http://localhost:8021/docs`
-
-## Configuration
-
-All configuration is done via environment variables or `.env` file. See `.env.example` for all available options.
-
-Key configurations:
-- `TENTACLE_MODE`: Running mode (`embedded`/`standalone`)
-- `TENTACLE_PORT`: API server port (default: 8021)
-- `TENTACLE_SEARCH_PROVIDER`: Search engine provider (`duckduckgo`/`serpapi`)
-- `TENTACLE_DOMAINS_DIR`: Path to domain configuration YAML files
-- `TENTACLE_MAX_SNIPPET_SIZE`: Maximum snippet size per section
-- `TENTACLE_FILTER_LEVEL`: Global default filter level (`none`/`standard`/`strict`)
-
-## Security
-
-- **SSRF Protection**: Blocks access to private IP addresses by default
-- **Input Validation**: Strict schema validation for all inputs
-- **Rate Limiting**: Handled by Tuck gateway in embedded mode
-- **Audit Logging**: Full request/response logging with trace IDs (HXR compatible)
-
-## Development
-
-```bash
-# Run tests
-pytest
-
-# Lint code
-ruff check .
-
-# Format code
-ruff format .
-```
-
-## License
-
-MIT
+*Helix-Tentacle（rs）Rust 重构版。早期 Python 版保留于 main 分支作为哲学历史参考。Apache 2.0。*
