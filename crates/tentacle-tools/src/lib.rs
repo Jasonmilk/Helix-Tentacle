@@ -12,9 +12,13 @@ pub mod wasm_tool;
 #[cfg(feature = "js")]
 pub mod js_tool;
 pub mod loader;
+#[cfg(feature = "scraper")]
+pub mod targeted_scraper;
 
 #[cfg(feature = "wasm")]
 pub use wasm_tool::WasmTool;
 #[cfg(feature = "js")]
 pub use js_tool::JsTool;
 pub use loader::PluginLoader;
+#[cfg(feature = "scraper")]
+pub use targeted_scraper::TargetedScraper;

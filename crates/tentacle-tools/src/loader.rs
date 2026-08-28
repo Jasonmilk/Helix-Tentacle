@@ -11,7 +11,9 @@
 //! 5. 注册到 ToolRegistry
 
 use tentacle_core::error::ToolError;
-use tentacle_core::manifest::{verify_file_integrity, Manifest};
+#[cfg(any(feature = "wasm", feature = "js"))]
+use tentacle_core::manifest::verify_file_integrity;
+use tentacle_core::manifest::Manifest;
 use tentacle_core::registry::{ScanReport, ToolRegistry};
 use tentacle_core::tool::Tool;
 use std::path::{Path, PathBuf};
