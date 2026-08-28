@@ -1,30 +1,10 @@
 # Helix-Tentacle 生长记录
-> **版本**：v1.1
+> **版本**：v1.2
 > **日期**：2026-08-29
 > **规则**：仅保留最近 3 条记录，超则归档至 `docs/archive/growth/`
 > **归档策略**：历史随仓库版本化，永不删除
 
-## 记录 1：P2 完成——觅食 + 沙箱（四修正全部兑现）（2026-08-29）
-**变异类型**：P2 阶段完成
-**背景**：
-- P2 目标：渐进式觅食评估器 + 已见熵布隆过滤器 + WASM 沙箱 + JS 协程沙箱
-- 四修正剩余 2/3 在 P2 落地（修正2 布隆过滤器、修正3 协程沙箱）
-- 按 T1→T2→T3→T4 串行执行，每 T 验证后再进下一个
-**关键决策**：
-1. **T1 forager**：`ForagingEvaluator` 纯统计信息增益评估（Jaccard/N-Gram），0 Token。多维停止条件（LowInformationGain/MaxPagesReached/ZeroGainStreak）。中文 2-Gram 滑窗分词（零依赖）
-2. **T2 布隆过滤器**：可选 `bloom` feature（bloomfilter crate），`seen_entropy_bloom: Option<Bloom<String>>`。命中布隆 → 增益计 0（全局记忆已覆盖）。Callosum 侧暂不实现（Callosum 待 Rust 重构），Tentacle 侧先定义接口
-3. **T3 WASM 沙箱**：wasmtime v26 + epoch_deadline 超时（10ms 递增线程）。T3 简化为纯 WASM（不链接 WASI），符合"如无必要勿增实体"。wasmtime-wasi v26 API 复杂（WasiP1Ctx 无公开构造），WASI stdout/文件系统留到 P3
-4. **T4 JS 协程沙箱**：rquickjs v0.5 + 独立线程 + 协变中断（set_interrupt_handler + AtomicBool）+ 内存限制（默认 50MB）。危险 API 移除（rquickjs 默认无 require/import/文件/网络）。关键修复：在 context.with 闭包内直接通过 channel 发送结果（闭包返回 ()），避免 rquickjs Exception(Value) 生命周期问题导致错误场景挂起
-**四修正进度**：修正1✅ 修正2✅ 修正3✅ 修正4✅（全部兑现！）
-**验收**：
-- T1: 10 passed（forager 单元测试）
-- T2: 14 passed (bloom) / 11 passed (无 bloom)，向后兼容
-- T3: 7 passed (runtime) / 0 warning，纯 WASM 零外部访问验证
-- T4: 10 passed (runtime) / 0 warning，协变中断 + 内存限制 + 危险 API 移除验证
-- 全 workspace: 51 passed, 0 failed, 0 warning
-**状态**：✅ P2 完成，四修正全部兑现，进入 P3（工具集成 + WASI 细化 + worker 池优化 + 首个内置工具）
----
-## 记录 2：P3 完成——工具集成 + WASI 细化 + worker 池 + 首个内置工具 + 传输层集成（2026-08-29）
+## 记录 1：P3 完成——工具集成 + WASI 细化 + worker 池 + 首个内置工具 + 传输层集成（2026-08-29）
 **变异类型**：P3 阶段完成
 **背景**：
 - P3 目标：WASI 细化 + worker 池优化 + 工具执行引擎集成 + 首个内置工具 targeted_scraper + 传输层集成测试
@@ -46,6 +26,32 @@
 - T5: 7 passed (integration)，端到端传输层集成测试
 - 全 feature 编译：通过（runtime + scraper + bloom）
 **状态**：✅ P3 完成，进入 P4（生态对齐 + gRPC/MCP 传输层实现 + CI-144 接入）
+---
+## 记录 2：P4 完成——生态对齐 + gRPC/MCP 传输层 + 插件热插拔 + 全传输层集成（2026-08-29）
+**变异类型**：P4 阶段完成
+**背景**：
+- P4 目标：gRPC 传输层 + MCP 传输层 + 生态对齐（Anaphase-Helix 契约 + CI-144 语义）+ 插件热插拔 + 全传输层集成测试
+- 按 T1→T2→T3→T4→T5 串行执行，每 T 验证后再进下一个
+- 方法论闭环：ADR-0001 追加 P4 决策（6-12），PLAN.md 实时更新，提交信息持续关联 ADR
+**关键决策**：
+1. **T1 gRPC 传输层**：tonic + proto 定义（ListManifests/GetManifest/ExecuteTool/ExecuteStream）+ 服务端骨架。proto 契约与 Anaphase-Helix 对齐，identity_labels/trace_id/seen_entropy_bloom 字段完整传递
+2. **T2 MCP 传输层**：手动实现 JSON-RPC 2.0 over stdio（rmcp 的宏是编译时静态注册，不适合动态工具注册）。tools/list + tools/call 端点，_meta 扩展字段传递 identity_labels，inputSchema 从 Manifest parameters_schema 自动映射
+3. **T3 生态对齐**：identity_labels 扩展字段（HTTP/gRPC/MCP 三传输层统一）+ 参数 Schema 校验（MCP tools/call 前校验 arguments）+ contract.md 更新（三传输层统一凭证流转规范）。CI-144 v2.0 PAL 冻结后自然接入，不阻塞 P4
+4. **T4 插件热插拔**：PluginWatcher + notify crate（文件系统事件监听）+ 可选 `hot-reload` feature（默认不启用，保持 Tentacle 轻量）。新增/移除插件时，说明书索引实时更新，无需重启
+5. **T5 全传输层集成测试**：新建 `tentacle-integration-tests` crate（publish=false，仅测试用），11 个测试覆盖 HTTP/gRPC/MCP 三传输层端到端 + 跨传输层一致性。关键修复：axum 版本对齐（0.7）、ExecutionRequest.tool 必填字段、manifest 索引响应格式（Vec<ManifestIndex> 数组）、MCP 可见性（handle_message/JsonRpcResponse 改为 pub）
+**方法论闭环**：
+- ADR-0001 追加决策 6-12（gRPC tonic、MCP 手动实现、_meta 扩展字段、Schema 校验、CI-144 对齐、插件热插拔、三传输层统一凭证流转）
+- PLAN.md 实时更新（P4 进度表 + 阶段总览地图）
+- 提交信息持续关联 ADR（`(ADR-0001 §Tx)`）
+- GROWTH.md 追加 P4 记录，P2 记录归档至 `docs/archive/growth/2026-08-29-p2-foraging-sandbox.md`
+**验收**：
+- T1: 8 passed (gRPC)，manifest 索引 + execute + 未找到 NotFound
+- T2: 8 passed (MCP)，tools/list + tools/call + _meta 扩展字段
+- T3: 17 passed (MCP Schema 校验) + contract.md 更新
+- T4: 32 passed (core，含 hot-reload feature)
+- T5: 11 passed (integration)，HTTP/gRPC/MCP 端到端 + 跨传输层一致性
+- P4 合计：76+ tests
+**状态**：✅ P4 完成，进入 P5（性能优化 + 生产就绪）
 ---
 ## 记录 3：预留
 *（按 DNA v2.0 SOP，新记录追加至此，旧记录自动归档）*
