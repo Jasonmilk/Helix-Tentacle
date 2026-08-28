@@ -42,7 +42,9 @@ Tentacle 对齐 Anaphase（gRPC 契约 + 凭证标签流转 + 共识 Helix 模�
 
 | 文档 | 路径 |
 |---|---|
-| 愿景 | `docs/VISION.md` |
+| 愿景索引 | `docs/VISION.md` |
+| 知识本体（完整叙事） | `docs/SPEC.md` |
+| 哲学 / 架构 / 契约 / 安全分卷 | `docs/spec/` |
 | 不可变原则 | `docs/DNA.md` |
 | 生长记录 | `docs/GROWTH.md` |
 | 当前阶段导航 | `docs/PLAN.md` |

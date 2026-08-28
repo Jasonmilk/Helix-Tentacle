@@ -45,6 +45,8 @@ Tentacle 是自包含的通用工具服务器。它不属于任何生态，但�
 
 | 你想知道 | 去看 |
 |---|---|
+| 完整叙事（知识本体） | `docs/SPEC.md` |
+| 哲学 / 架构 / 契约 / 安全分卷 | `docs/spec/` |
 | 完整设计定案 | `docs/vision/tentacle-whitepaper-v3.4.md` |
 | 不可变原则与流程 | `docs/DNA.md` |
 | 当前开发计划 | `docs/PLAN.md` |
