@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/tentacle-core",
+    "crates/tentacle-http",
+    "crates/tentacle-tools",
+    "crates/tentacle-transport-http",
+    "crates/tentacle-transport-mcp",
+    "crates/tentacle-transport-grpc",
+    "crates/tentacle-wasm",
+    "crates/tentacle-js",
+    "crates/tentacle",
+]
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+license = "Apache-2.0"
+rust-version = "1.80"
+
+[workspace.dependencies]
+# T1 骨架：共享依赖版本在 T2+ 逐步添加
+# 核心（无网络依赖，<500KB）
+# tentacle-core = { path = "crates/tentacle-core" }

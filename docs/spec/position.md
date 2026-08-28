@@ -38,7 +38,28 @@
 
 **两种模式共享同一套 ToolRegistry 和安全层**，无状态冲突。Tentacle 的通用性保证了它既是 Helix 的手脚，也是全 AI Agent 社区的公共武器库。
 
-## 四、哲学检查清单（8 条）
+## 四、CI-144：组件间通信协议（非人类交互）
+
+**CI-144 是组件间的通信协议，不是人类交互协议。**
+
+| 交互对象 | 传输 | 人类看到 | 原因 |
+|---|---|---|---|
+| Helix-Mind（通过 Cellrix/CLI） | gRPC/CI-144 | 自然语言回复 | Cellrix 渲染人类可读界面 |
+| Helix-Mind（gRPC 直接调用） | Protobuf/CI-144 | 结构化数据 | 组件间通信 |
+| Anaphase-Helix（CLI/TUI） | gRPC/CI-144 | 自然语言 + 结构化 | Cellrix 渲染 |
+| Tentacle（Anaphase 调用） | **gRPC/CI-144 语义** | （Anaphase 消费，非人类直读） | 组件间通信 |
+| Tentacle（HTTP API 直调） | JSON | JSON 响应 | 主动要求的结构化输出 |
+| Tentacle（MCP/STDIO） | 通用协议 | 依客户端 | 通用生态 |
+
+**关键区分**：
+- **CI-144**：协议规范，定义组件间如何交换信息（Tentacle ↔ Anaphase 内部通信用 CI-144 语义）
+- **人类交互界面**：Cellrix 的职责，将 CI-144 语义快照渲染为人类可读的自然语言界面
+
+**当你通过 Cellrix 或 CLI 与 Helix 对话时，你看到的是自然语言回复，不是 JSON 或二进制帧**——Cellrix 负责渲染。只有主动调用 Tentacle 的 HTTP API 时，才会收到 JSON 响应。
+
+**Tentacle 不定义 CI-144**（CI-144 协议族定义在 CommonIntents 仓库），Tentacle 是 CI-144 的消费方——在与 Anaphase 内部通信时遵循 CI-144 语义。
+
+## 五、哲学检查清单（8 条）
 
 | 原则 | Tentacle 实现 |
 |---|---|
@@ -51,7 +72,7 @@
 | **脑手分离** | Tentacle 是"手"（执行），不参与"脑"（思考/编排） |
 | **意志优先** | Tentacle 不决策，只执行 Anaphase 的明确指令 |
 
-## 五、前沿研究与工业验证（晶体/胶体支撑）
+## 六、前沿研究与工业验证（晶体/胶体支撑）
 
 ### 5.1 L1 信息触手（渐进式觅食）
 
