@@ -1,8 +1,8 @@
-# Helix-Tentacle RNA — 加载协议 v1.0
+# Helix-Tentacle RNA — 加载协议 v1.3
 
 > **所属方法论**：DNA 自生长方法论 v2.0
 > **对齐知识本体**：v1.0（白皮书 v3.4）
-> **状态**：定稿生效
+> **状态**：定稿生效（v1.3 补全 PLAN.md 阶段流转 SOP）
 
 ## 加载协议（三层闭环）
 
@@ -72,6 +72,7 @@
 - [ ] 写 `GROWTH.md`（记录本次生长健康度）
 - [ ] 写 ADR（`docs/decisions/`，如有艰难决策）
 - [ ] 写 `DEPRECATE.md`（如有退役功能）
+- [ ] **更新 `PLAN.md`（阶段流转：已完成阶段详细内容移除，切换到下一阶段；保持当前阶段 + 下一阶段预览 + 阶段总览三段式；≤150 行）**
 - [ ] 归档：`GROWTH` 超 3 条？移入 `docs/archive/growth/`
 - [ ] 归档：`DEPRECATE` 已安葬？移入 `docs/archive/deprecated/`
 - [ ] 提交信息包含 ADR 关联：`(ADR-NNNN §Tx)`
@@ -82,3 +83,4 @@
 - v1.0 (2026-08-28): 从 VISION/SPEC 脱水，三层加载协议定稿，AI 协作铁律增加凭证红线（第8条），与 Helix-Mind/Anaphase-Helix 方法论结构对齐
 - v1.1 (2026-08-29): 补全 DNA 方法论通用铁律第8条"认识论螺旋"（遗漏修复），凭证红线移至第9条（Tentacle 特有）。AI 协作铁律从 8 条补全为 9 条（8 通用 + 1 特有），与 Helix-Mind/Anaphase-Helix 完全对齐
 - v1.2 (2026-08-29): 决策拦截铁律增加 ADR 命名规范——文件名为 `ADR-<4位编号>-<标题>.md`（如 ADR-0001-rust-rebuild.md），引用时使用 `ADR-<编号>`（如 ADR-0001），文件名与引用名必须一致。现有文件 0001-rust-rebuild.md 重命名为 ADR-0001-rust-rebuild.md
+- v1.3 (2026-08-29): 大版本更新 SOP「更新后」检查清单补全 PLAN.md 阶段流转要求——阶段完成后必须更新 PLAN.md（已完成阶段详细内容移除，切换到下一阶段，保持三段式结构，≤150 行）。修复方法论闭环缺口：此前 SOP 只要求写 GROWTH/ADR/DEPRECATE，未明确要求 PLAN.md 阶段流转，导致已完成阶段详细内容残留在 PLAN 中（知识腐化风险）。与第一层加载协议「PLAN.md 必读」形成真闭环
