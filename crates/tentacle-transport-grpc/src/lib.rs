@@ -291,7 +291,7 @@ mod tests {
         }
     }
 
-    fn test_state() -> GrpcState {
+    async fn test_state() -> GrpcState {
         let state = GrpcState::new(ToolRegistry::new());
         let m = Manifest {
             name: "mock".into(),
@@ -308,7 +308,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_manifests() {
-        let service = TentacleGrpcService::new(test_state());
+        let service = TentacleGrpcService::new(test_state().await);
         let request = Request::new(ListManifestsRequest {});
         let response = service.list_manifests(request).await.unwrap();
         let manifests = response.into_inner().manifests;
@@ -319,7 +319,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_manifest() {
-        let service = TentacleGrpcService::new(test_state());
+        let service = TentacleGrpcService::new(test_state().await);
         let request = Request::new(GetManifestRequest { name: "mock".into() });
         let response = service.get_manifest(request).await.unwrap();
         let manifest = response.into_inner().manifest.unwrap();
@@ -329,7 +329,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_manifest_not_found() {
-        let service = TentacleGrpcService::new(test_state());
+        let service = TentacleGrpcService::new(test_state().await);
         let request = Request::new(GetManifestRequest { name: "nonexistent".into() });
         let result = service.get_manifest(request).await;
         assert!(result.is_err());
@@ -338,7 +338,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_execute_tool() {
-        let service = TentacleGrpcService::new(test_state());
+        let service = TentacleGrpcService::new(test_state().await);
         let request = Request::new(ExecuteToolRequest {
             tool: "mock".into(),
             params: "{}".to_string(),
@@ -355,7 +355,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_execute_tool_not_found() {
-        let service = TentacleGrpcService::new(test_state());
+        let service = TentacleGrpcService::new(test_state().await);
         let request = Request::new(ExecuteToolRequest {
             tool: "nonexistent".into(),
             params: "{}".to_string(),
@@ -370,7 +370,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_execute_tool_empty_name() {
-        let service = TentacleGrpcService::new(test_state());
+        let service = TentacleGrpcService::new(test_state().await);
         let request = Request::new(ExecuteToolRequest {
             tool: String::new(),
             params: "{}".to_string(),
@@ -385,7 +385,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_execute_tool_stream() {
-        let service = TentacleGrpcService::new(test_state());
+        let service = TentacleGrpcService::new(test_state().await);
         let request = Request::new(ExecuteToolRequest {
             tool: "mock".into(),
             params: "{}".to_string(),
@@ -409,7 +409,7 @@ mod tests {
     #[tokio::test]
     async fn test_identity_labels_passthrough() {
         // 验证凭证标签流转（四修正1）：identity_labels 字段传递，不传递明文凭证
-        let service = TentacleGrpcService::new(test_state());
+        let service = TentacleGrpcService::new(test_state().await);
         let mut labels = HashMap::new();
         labels.insert("weibo".to_string(), "weibo_session_1".to_string());
         let request = Request::new(ExecuteToolRequest {
