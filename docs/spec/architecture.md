@@ -67,20 +67,19 @@ pub struct ForagingEvaluator {
 - **分词策略**：英文按非字母数字分割（长度≥2，转小写）；中文用字符级 2-Gram 滑窗（CJK 统一表意文字/平假名/片假名/韩文），不引入重型字典，保持零依赖下的足够鲁棒性
 
 ### 3.4 协程沙箱（T06）
+- WASM：wasmtime + `epoch_deadline`（**P2-T3 已实现**，纯 WASM 零外部访问）
+  - **P3-T1 WASI 细化已实现**：stdout 捕获到内存（MemoryOutputPipe）+ 文件系统权限按 Manifest permissions.filesystem 配置
+  - stdout：MemoryOutputPipe（可 clone，执行后 contents() 获取），不泄露到宿主终端
+  - 文件系统：preopened_dir 按 Manifest permissions.filesystem 配置，支持 "read:/path"、"write:/path"、"rw:/path" 格式
+  - 未声明的目录无法访问，越权即拒绝；预打开不存在的目录返回 PreopenDir 错误
+  - epoch 递增线程（10ms/次）+ `set_epoch_deadline` → 超时强制终止
+  - `WasmSandbox` 可复用：一个实例执行多个模块，独立 Store 内存隔离
 - JS：QuickJS 沙箱（**P2-T4 已实现**，rquickjs + 独立线程 + 协变中断）
   - 独立线程执行：不阻塞主线程，线程级兜底超时
   - 协变中断：`set_interrupt_handler` + `AtomicBool`，JS 执行到安全点时检查取消信号
   - 内存限制：`set_memory_limit`（默认 50MB），防止 JS 代码耗尽内存
-  - 危险 API 移除：rquickjs 默认不提供 require/import/文件/网络 API（需显式启用 loader feature）
-  - 结果转换：按 Value 类型（String/Bool/Int/Float/Null/Undefined/Object）转换为字符串
-- `set_interrupt_handler` + `AtomicBool` + `CancellationToken` → 协程级协作终止
-- `JS_SetMemoryLimit` 限内存；移除 require/import 和文件/网络 API
-- WASM：wasmtime + `epoch_deadline`（**P2-T3 已实现**，纯 WASM 零外部访问）
-  - T3 阶段：不链接 WASI，模块只能调用自身导出函数，无法访问文件/网络/环境
-  - epoch 递增线程（10ms/次）+ `set_epoch_deadline` → 超时强制终止
-  - `WasmSandbox` 可复用：一个实例执行多个模块，独立 Store 内存隔离
-  - WASI stdout 捕获 + 文件系统权限 → P3 工具集成时实现
-  - 命令：默认编译期禁用
+  - 危险 API 移除：rquickjs 默认不提供 require/import/文件/网络 API
+  - worker 池优化 → P3-T2 实现
 
 ## 四、降级策略
 
