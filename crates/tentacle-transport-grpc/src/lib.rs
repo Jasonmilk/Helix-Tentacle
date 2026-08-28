@@ -16,7 +16,8 @@ pub mod proto {
 
 use proto::tentacle_service_server::{TentacleService, TentacleServiceServer};
 use proto::*;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tentacle_core::manifest::{Manifest, ManifestIndex, SecurityLevel};
 use tentacle_core::registry::ToolRegistry;
 use tentacle_core::tool::{ExecutionRequest, StopReason, Tool, ToolOutput};
@@ -36,8 +37,8 @@ impl GrpcState {
     }
 
     /// 注册已实例化的工具（用于内置工具或测试）
-    pub fn register_tool(&self, tool: Arc<dyn Tool>) -> Result<(), tentacle_core::error::RegistryError> {
-        self.registry.lock().unwrap().register_tool(tool)
+    pub async fn register_tool(&self, tool: Arc<dyn Tool>) -> Result<(), tentacle_core::error::RegistryError> {
+        self.registry.lock().await.register_tool(tool)
     }
 }
 
@@ -57,13 +58,17 @@ impl TentacleGrpcService {
     }
 }
 
-#[tonic::async_trait]
+#[async_trait::async_trait]
 impl TentacleService for TentacleGrpcService {
+    type ExecuteToolStreamStream = tokio_stream::Iter<
+        std::vec::IntoIter<Result<ExecuteToolStreamResponse, Status>>,
+    >;
+
     async fn list_manifests(
         &self,
         _request: Request<ListManifestsRequest>,
     ) -> Result<Response<ListManifestsResponse>, Status> {
-        let registry = self.state.registry.lock().unwrap();
+        let registry = self.state.registry.lock().await;
         let index = registry.index();
         let manifests = index.into_iter().map(manifest_index_to_proto).collect();
         Ok(Response::new(ListManifestsResponse { manifests }))
@@ -74,7 +79,7 @@ impl TentacleService for TentacleGrpcService {
         request: Request<GetManifestRequest>,
     ) -> Result<Response<GetManifestResponse>, Status> {
         let name = request.into_inner().name;
-        let registry = self.state.registry.lock().unwrap();
+        let registry = self.state.registry.lock().await;
         match registry.get_manifest(&name) {
             Some(m) => Ok(Response::new(GetManifestResponse {
                 manifest: Some(manifest_to_proto(m)),
@@ -94,7 +99,7 @@ impl TentacleService for TentacleGrpcService {
             return Err(Status::invalid_argument("tool name is required"));
         }
 
-        let registry = self.state.registry.lock().unwrap();
+        let registry = self.state.registry.lock().await;
         let tool = match registry.get_tool(&req.tool) {
             Some(t) => t.clone(),
             None => {
@@ -135,14 +140,14 @@ impl TentacleService for TentacleGrpcService {
     async fn execute_tool_stream(
         &self,
         request: Request<ExecuteToolRequest>,
-    ) -> Result<Response<tonic::Streaming<ExecuteToolStreamResponse>>, Status> {
+    ) -> Result<Response<Self::ExecuteToolStreamStream>, Status> {
         let req = request.into_inner();
 
         if req.tool.is_empty() {
             return Err(Status::invalid_argument("tool name is required"));
         }
 
-        let registry = self.state.registry.lock().unwrap();
+        let registry = self.state.registry.lock().await;
         let tool = match registry.get_tool(&req.tool) {
             Some(t) => t.clone(),
             None => {
@@ -176,8 +181,8 @@ impl TentacleService for TentacleGrpcService {
 
         // 简化：一次性输出，然后 done
         let response = ExecuteToolStreamResponse { data, done: true };
-        let stream = tokio_stream::iter(vec![Ok(response)]);
-        Ok(Response::new(tonic::Streaming::from_stream(stream)))
+        let stream: Self::ExecuteToolStreamStream = tokio_stream::iter(vec![Ok(response)]);
+        Ok(Response::new(stream))
     }
 }
 
@@ -247,7 +252,6 @@ fn stop_reason_to_proto(reason: StopReason) -> proto::StopReason {
 fn security_level_to_string(level: SecurityLevel) -> String {
     match level {
         SecurityLevel::Normal => "normal".to_string(),
-        SecurityLevel::Elevated => "elevated".to_string(),
         SecurityLevel::Critical => "critical".to_string(),
     }
 }
@@ -298,7 +302,7 @@ mod tests {
             security_level: SecurityLevel::Normal,
             ..Default::default()
         };
-        state.register_tool(Arc::new(MockTool { manifest: m })).unwrap();
+        state.register_tool(Arc::new(MockTool { manifest: m })).await.unwrap();
         state
     }
 
