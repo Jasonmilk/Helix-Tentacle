@@ -18,5 +18,21 @@
 5. **四修正为硬性验收**：凭证标签流转（Tuck）/ 已见熵布隆过滤器（Callosum）/ 异步协程沙箱（ARM）/ 动态共识适配（Standalone/Helix/MCP）
 **状态**：✅ 方法论已建立，Rust 重构待启动
 ---
-## 记录 2：预留
+## 记录 2：P1 完成——Rust 核心骨架 + HTTP 传输层（2026-08-28）
+**变异类型**：P1 阶段完成
+**背景**：
+- P1 目标：基于 DNA 方法论构建 Rust 版 Tentacle 核心骨架 + HTTP 传输层
+- 按白皮书 v3.4 crates 结构搭建，四修正为硬性验收
+- 方法论缺口：RNA.md/DEPRECATE.md 缺失，PLAN.md 未升级为导航牌格式
+**关键决策**：
+1. **T1 workspace 骨架**：9 crates（core/http/tools/transport-http/transport-mcp/transport-grpc/wasm/js/tentacle-bin），workspace Cargo.toml 共享配置
+2. **T2 core 类型**：Tool trait/Manifest/ToolRegistry/Redactor/ConsensusHook，无网络依赖。`ExecutionRequest.identity_labels`（无明文 credentials，修正1），`ConsensusMode{Standalone,Helix,Mcp}`（修正4）
+3. **T3 完整性校验**：SHA-256（sha2 crate）+ 插件目录扫描（walkdir）+ ScanReport 白盒可观测 + 渐进披露索引（ManifestIndex 只暴露 name/desc/version/security_level）
+4. **T4 HTTP 传输层**：axum 0.7 四端点（manifest 索引/完整说明书/execute/execute_stream SSE）。Critical 级工具走 ConsensusHook 审批，输出自动脱敏。`IdentityHttpClient` 出网强制 `X-Identity-Label` 头（修正1落地）
+5. **方法论补全**：RNA.md（三层加载 + PLAN 必读 + 凭证红线铁律）、DEPRECATE.md（DEP-001 Python 实现 + DEP-002 明文凭证）、PLAN.md 升级为导航牌格式（参照 Helix-Mind）
+**四修正进度**：修正1✅（凭证标签流转）、修正4✅（动态共识适配）、修正2⏳（布隆过滤器待 P2）、修正3⏳（协程沙箱待 P2）
+**验收**：`cargo test --workspace` → 37 passed, 0 failed, 0 warning
+**状态**：✅ P1 完成，进入 P2（觅食 + 沙箱 + 更多传输层）
+---
+## 记录 3：预留
 *（按 DNA v2.0 SOP，新记录追加至此，旧记录自动归档）*
