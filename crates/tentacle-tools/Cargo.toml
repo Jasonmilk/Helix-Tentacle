@@ -6,3 +6,10 @@ license.workspace = true
 
 [dependencies]
 tentacle-core = { path = "../tentacle-core" }
+bloomfilter = { version = "1", optional = true }
+
+[features]
+default = []
+# 已见熵布隆过滤器（四修正2，对接 Callosum 导出）
+# 默认不启用，保持 core 轻量；启用后 forager 可接收全局已见熵指纹
+bloom = ["dep:bloomfilter"]

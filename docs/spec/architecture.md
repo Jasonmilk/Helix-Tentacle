@@ -51,7 +51,7 @@ plugins/
 pub struct ForagingEvaluator {
     target_tokens: HashSet<String>,
     seen_entropy: HashMap<String, u32>,        // 本次会话已见
-    seen_entropy_bloom: Option<BloomFilter>,   // 全局已见熵（Callosum 导出，T2 实现）
+    seen_entropy_bloom: Option<BloomFilter>,   // 全局已见熵（Callosum 导出，P2-T2 已实现，可选 bloom feature）
     threshold_delta: f64,
     pages_fetched: u32,
     max_pages_per_session: u32,

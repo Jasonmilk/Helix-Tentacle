@@ -5,9 +5,13 @@
 //! 边缘价值递减时自动终止，避免无效爬取和平台防御触发。
 //!
 //! 核心原则：统计优先，LLM 兜底。能用统计方法解决的，绝不调用 LLM。
-//! T1 不做布隆过滤器（T2 实现），seen_entropy 仅在本次会话内维护。
+//! T2 已实现已见熵布隆过滤器（可选 `bloom` feature，四修正2）。
+//! 未启用 feature 时，seen_entropy 仅在本次会话内维护，零开销。
 
 use std::collections::{HashMap, HashSet};
+
+#[cfg(feature = "bloom")]
+use bloomfilter::Bloom;
 
 /// 觅食决策
 #[derive(Debug, Clone, PartialEq)]
@@ -49,6 +53,12 @@ pub struct ForagingEvaluator {
     zero_gain_streak: u32,
     /// 连续零增益上限（达到则终止）
     max_zero_gain_streak: u32,
+    /// 全局已见熵布隆过滤器（Callosum 导出，四修正2）
+    ///
+    /// 仅在 `bloom` feature 启用时存在。命中布隆的 token 增益计 0
+    /// （全局记忆已覆盖，避免重复采集）。未启用时完全零开销。
+    #[cfg(feature = "bloom")]
+    seen_entropy_bloom: Option<Bloom<String>>,
 }
 
 impl ForagingEvaluator {
@@ -68,7 +78,32 @@ impl ForagingEvaluator {
             max_pages_per_session,
             zero_gain_streak: 0,
             max_zero_gain_streak: 3,
+            #[cfg(feature = "bloom")]
+            seen_entropy_bloom: None,
         }
+    }
+
+    /// 设置全局已见熵布隆过滤器（四修正2，Callosum 导出）
+    ///
+    /// 仅在 `bloom` feature 启用时可用。命中布隆的 token 增益计 0。
+    #[cfg(feature = "bloom")]
+    pub fn with_seen_entropy_bloom(mut self, bloom: Bloom<String>) -> Self {
+        self.seen_entropy_bloom = Some(bloom);
+        self
+    }
+
+    /// 检查 token 是否被全局已见熵覆盖（布隆命中）
+    #[cfg(feature = "bloom")]
+    fn is_globally_seen(&self, token: &str) -> bool {
+        self.seen_entropy_bloom
+            .as_ref()
+            .map_or(false, |bloom| bloom.check(&token.to_string()))
+    }
+
+    /// 未启用 bloom feature 时的占位：token 永远不被全局覆盖
+    #[cfg(not(feature = "bloom"))]
+    fn is_globally_seen(&self, _token: &str) -> bool {
+        false
     }
 
     /// 评估新页面的信息增益，决定继续还是停止
@@ -93,10 +128,14 @@ impl ForagingEvaluator {
         // 分词
         let new_tokens = extract_tokens(page_text);
 
-        // 计算新信息增益：与目标相关且未见过的 token 数量
+        // 计算新信息增益：与目标相关、本次会话未见、且全局已见熵未覆盖的 token 数量
         let novel_target_tokens = new_tokens
             .iter()
-            .filter(|t| self.target_tokens.contains(*t) && !self.seen_entropy.contains_key(*t))
+            .filter(|t| {
+                self.target_tokens.contains(*t)
+                    && !self.seen_entropy.contains_key(*t)
+                    && !self.is_globally_seen(t)
+            })
             .count();
 
         let gain = if self.target_tokens.is_empty() {
@@ -321,6 +360,72 @@ mod tests {
         assert!(forager.target_token_count() > 0);
         // 高增益页面
         let decision = forager.evaluate_gain("赛格大厦振动事件后，政策变迁研究，居民安置方案");
+        assert_eq!(decision, ForageDecision::Continue);
+    }
+
+    // ===== 已见熵布隆过滤器测试（四修正2，仅 bloom feature 启用时编译）=====
+
+    #[cfg(feature = "bloom")]
+    #[test]
+    fn test_bloom_hit_zero_gain() {
+        // 先提取查询的所有目标 token（含中文 2-Gram 中间词如"格大"），全部插入布隆
+        let query = "赛格大厦 振动";
+        let target_tokens = extract_tokens(query);
+        let mut bloom = Bloom::new(100, 1000);
+        for token in &target_tokens {
+            bloom.set(&token.clone());
+        }
+
+        let mut forager = ForagingEvaluator::new(query, 0.15, 50)
+            .with_seen_entropy_bloom(bloom);
+
+        // 页面包含目标 token，但全部被布隆覆盖 → 增益为 0 → Stop
+        let decision = forager.evaluate_gain("赛格大厦振动事件，居民紧急疏散");
+        match decision {
+            ForageDecision::Stop { reason: ForageStopReason::LowInformationGain { last_gain, .. } } => {
+                assert_eq!(last_gain, 0.0);
+            }
+            ForageDecision::Stop { reason: ForageStopReason::ZeroGainStreak { .. } } => {}
+            _ => panic!("expected Stop (zero gain due to bloom), got {:?}", decision),
+        }
+    }
+
+    #[cfg(feature = "bloom")]
+    #[test]
+    fn test_bloom_miss_normal_gain() {
+        // 布隆中不包含目标 token
+        let bloom = Bloom::new(100, 1000);
+
+        let mut forager = ForagingEvaluator::new("赛格大厦 振动", 0.15, 50)
+            .with_seen_entropy_bloom(bloom);
+
+        // 页面包含目标 token，布隆未覆盖 → 正常增益 → Continue
+        let decision = forager.evaluate_gain("赛格大厦振动事件，居民紧急疏散");
+        assert_eq!(decision, ForageDecision::Continue);
+    }
+
+    #[cfg(feature = "bloom")]
+    #[test]
+    fn test_bloom_partial_coverage() {
+        // 布隆只覆盖部分目标 token
+        let mut bloom = Bloom::new(100, 1000);
+        bloom.set(&"赛格".to_string());
+        bloom.set(&"大厦".to_string());
+        // "振动" 未被覆盖
+
+        let mut forager = ForagingEvaluator::new("赛格大厦 振动", 0.15, 50)
+            .with_seen_entropy_bloom(bloom);
+
+        // "振动" 未被布隆覆盖 → 仍有增益 → Continue
+        let decision = forager.evaluate_gain("赛格大厦振动事件，居民紧急疏散");
+        assert_eq!(decision, ForageDecision::Continue);
+    }
+
+    #[test]
+    fn test_no_bloom_backward_compatible() {
+        // 不启用布隆（或不设置），行为与 T1 完全一致
+        let mut forager = ForagingEvaluator::new("赛格大厦 振动", 0.15, 50);
+        let decision = forager.evaluate_gain("赛格大厦振动事件，居民紧急疏散");
         assert_eq!(decision, ForageDecision::Continue);
     }
 }
