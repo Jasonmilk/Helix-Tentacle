@@ -4,12 +4,19 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+default = []
+# 插件热插拔：监听 plugins/ 目录的文件变化，自动注册/注销 Manifest
+hot-reload = ["dep:notify"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 hex = "0.4"
 walkdir = "2"
+# 插件热插拔（可选 feature）
+notify = { version = "6", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

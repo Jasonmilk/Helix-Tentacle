@@ -14,6 +14,10 @@ pub mod redact;
 pub mod consensus;
 pub mod error;
 
+/// 插件热插拔监听器（可选 feature: hot-reload）
+#[cfg(feature = "hot-reload")]
+pub mod plugin_watcher;
+
 pub use manifest::{
     Manifest, ManifestIndex, Integrity, ForagingConfig, Permission, SecurityLevel,
     RequiresIdentity,

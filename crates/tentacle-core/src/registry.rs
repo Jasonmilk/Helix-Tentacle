@@ -103,6 +103,29 @@ impl ToolRegistry {
         self.manifests.contains_key(name)
     }
 
+    /// 注销工具 Manifest（插件热插拔：文件删除时调用）
+    ///
+    /// 同时注销已实例化的工具（如果存在）。
+    pub fn unregister(&mut self, name: &str) -> bool {
+        let manifest_removed = self.manifests.remove(name).is_some();
+        let tool_removed = self.tools.remove(name).is_some();
+        manifest_removed || tool_removed
+    }
+
+    /// 更新工具 Manifest（插件热插拔：文件修改时调用）
+    ///
+    /// 如果工具不存在，则注册；如果存在，则替换 Manifest。
+    /// 已实例化的工具不受影响（执行体的热加载在后续阶段实现）。
+    pub fn update_manifest(&mut self, manifest: Manifest) -> Result<(), RegistryError> {
+        let name = manifest.name.clone();
+        if self.manifests.contains_key(&name) {
+            self.manifests.insert(name, manifest);
+        } else {
+            self.manifests.insert(name, manifest);
+        }
+        Ok(())
+    }
+
     /// 已注册工具数量
     pub fn len(&self) -> usize {
         self.manifests.len()
