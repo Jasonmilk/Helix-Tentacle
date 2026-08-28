@@ -162,11 +162,22 @@ impl McpServer {
         };
 
         let tool_name = params["name"].as_str().unwrap_or("");
-        let arguments = params["arguments"].as_object().cloned().unwrap_or_default();
+        let mut arguments = params["arguments"].as_object().cloned().unwrap_or_default();
 
         if tool_name.is_empty() {
             return tool_error("Missing tool name");
         }
+
+        // 从 _meta 中提取 identity_labels（MCP 扩展字段，四修正1）
+        let identity_labels = extract_identity_labels(&params["_meta"]);
+
+        // 从 _meta 中提取 trace_id
+        let trace_id = params["_meta"]["traceId"].as_str().map(|s| s.to_string());
+
+        // 从 _meta 中提取 seen_entropy_bloom（四修正2）
+        let seen_entropy_bloom = params["_meta"]["seenEntropyBloom"]
+            .as_str()
+            .map(|s| s.to_string());
 
         let registry = self.registry.lock().unwrap();
         let tool = match registry.get_tool(tool_name) {
@@ -175,15 +186,27 @@ impl McpServer {
                 return tool_error(&format!("Tool not found: {}", tool_name));
             }
         };
+
+        // 参数 Schema 校验（校验 arguments 是否符合 Manifest 的 parameters_schema）
+        let manifest = tool.manifest();
+        if let Err(e) = validate_arguments(&arguments, &manifest.parameters_schema) {
+            drop(registry);
+            return tool_error(&format!("Parameter validation failed: {}", e));
+        }
+
+        // 移除 _identity_labels 等内部字段，不传递给工具
+        arguments.remove("_identity_labels");
+        arguments.remove("_trace_id");
+
         drop(registry);
 
         // 构建执行请求
         let execution_req = ExecutionRequest {
             tool: tool_name.to_string(),
             params: Value::Object(arguments),
-            identity_labels: HashMap::new(),
-            trace_id: None,
-            seen_entropy_bloom: None,
+            identity_labels,
+            trace_id,
+            seen_entropy_bloom,
         };
 
         // 执行工具（同步阻塞，在 tokio 任务中执行）
@@ -251,6 +274,93 @@ struct JsonRpcError {
 }
 
 // === 辅助函数 ===
+
+/// 从 _meta 中提取 identity_labels（MCP 扩展字段，四修正1）
+///
+/// 格式：
+/// ```json
+/// "_meta": {
+///   "identityLabels": {
+///     "weibo": "weibo_session_1",
+///     "github": "github_token_1"
+///   }
+/// }
+/// ```
+fn extract_identity_labels(meta: &Value) -> HashMap<String, String> {
+    let mut labels = HashMap::new();
+    if let Some(obj) = meta["identityLabels"].as_object() {
+        for (k, v) in obj {
+            if let Some(s) = v.as_str() {
+                labels.insert(k.clone(), s.to_string());
+            }
+        }
+    }
+    labels
+}
+
+/// 校验参数是否符合 JSON Schema（轻量级校验，只校验必填字段和类型）
+///
+/// 完整的 JSON Schema 校验需要 jsonschema crate，这里只做轻量级校验：
+/// - 校验 required 字段是否存在
+/// - 校验字段类型是否匹配（string/number/integer/boolean/object/array）
+fn validate_arguments(arguments: &serde_json::Map<String, Value>, schema: &Value) -> Result<(), String> {
+    // 校验 required 字段
+    if let Some(required) = schema["required"].as_array() {
+        for field in required {
+            if let Some(field_name) = field.as_str() {
+                if !arguments.contains_key(field_name) {
+                    return Err(format!("Missing required field: {}", field_name));
+                }
+            }
+        }
+    }
+
+    // 校验字段类型
+    if let Some(properties) = schema["properties"].as_object() {
+        for (field_name, field_schema) in properties {
+            if let Some(value) = arguments.get(field_name) {
+                if let Some(expected_type) = field_schema["type"].as_str() {
+                    let actual_type = json_type_name(value);
+                    if !type_matches(expected_type, actual_type) {
+                        return Err(format!(
+                            "Field '{}' expects type '{}', got '{}'",
+                            field_name, expected_type, actual_type
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// 获取 JSON 值的类型名称
+fn json_type_name(value: &Value) -> &'static str {
+    match value {
+        Value::String(_) => "string",
+        Value::Number(n) => {
+            if n.is_i64() || n.is_u64() {
+                "integer"
+            } else {
+                "number"
+            }
+        }
+        Value::Bool(_) => "boolean",
+        Value::Object(_) => "object",
+        Value::Array(_) => "array",
+        Value::Null => "null",
+    }
+}
+
+/// 检查类型是否匹配（integer 是 number 的子类型）
+fn type_matches(expected: &str, actual: &str) -> bool {
+    match expected {
+        "number" => actual == "number" || actual == "integer",
+        "integer" => actual == "integer",
+        _ => expected == actual,
+    }
+}
 
 /// 将 Manifest 转换为 MCP Tool 格式
 fn manifest_to_mcp_tool(index: &ManifestIndex, full_manifest: Option<&Manifest>) -> Value {
@@ -461,6 +571,192 @@ mod tests {
         let result = server.handle_message("invalid json").await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid JSON-RPC"));
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_with_identity_labels() {
+        let server = test_server();
+        let request = json!({
+            "jsonrpc": "2.0",
+            "id": 6,
+            "method": "tools/call",
+            "params": {
+                "name": "mock",
+                "arguments": {"query": "test"},
+                "_meta": {
+                    "identityLabels": {
+                        "weibo": "weibo_session_1",
+                        "github": "github_token_1"
+                    },
+                    "traceId": "trace-abc-123"
+                }
+            }
+        });
+
+        let response = server.handle_message(&request.to_string()).await.unwrap().unwrap();
+        assert_eq!(response.id, json!(6));
+        let result = response.result.unwrap();
+        assert_eq!(result["isError"], false);
+        // identity_labels 通过 _meta 传递，不影响工具执行结果
+        let content = result["content"].as_array().unwrap();
+        assert!(content[0]["text"].as_str().unwrap().contains("ok"));
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_missing_required_param() {
+        // 创建一个有 required 字段的工具
+        let server = McpServer::new(ToolRegistry::new());
+        let m = Manifest {
+            name: "required_tool".into(),
+            version: "1.0".into(),
+            description: "tool with required params".into(),
+            executable: "required.wasm".into(),
+            integrity: Integrity::sha256("abc"),
+            security_level: SecurityLevel::Normal,
+            parameters_schema: json!({
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer"}
+                },
+                "required": ["query"]
+            }),
+            ..Default::default()
+        };
+        server.register_tool(Arc::new(MockTool { manifest: m })).unwrap();
+
+        // 缺少必填字段 query
+        let request = json!({
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {
+                "name": "required_tool",
+                "arguments": {"limit": 10}
+            }
+        });
+
+        let response = server.handle_message(&request.to_string()).await.unwrap().unwrap();
+        assert_eq!(response.id, json!(7));
+        let result = response.result.unwrap();
+        assert_eq!(result["isError"], true);
+        let content = result["content"].as_array().unwrap();
+        assert!(content[0]["text"].as_str().unwrap().contains("Missing required field: query"));
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_wrong_param_type() {
+        // 创建一个有类型约束的工具
+        let server = McpServer::new(ToolRegistry::new());
+        let m = Manifest {
+            name: "typed_tool".into(),
+            version: "1.0".into(),
+            description: "tool with typed params".into(),
+            executable: "typed.wasm".into(),
+            integrity: Integrity::sha256("abc"),
+            security_level: SecurityLevel::Normal,
+            parameters_schema: json!({
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer"}
+                }
+            }),
+            ..Default::default()
+        };
+        server.register_tool(Arc::new(MockTool { manifest: m })).unwrap();
+
+        // limit 应该是 integer，但传了 string
+        let request = json!({
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "tools/call",
+            "params": {
+                "name": "typed_tool",
+                "arguments": {"query": "test", "limit": "not_a_number"}
+            }
+        });
+
+        let response = server.handle_message(&request.to_string()).await.unwrap().unwrap();
+        assert_eq!(response.id, json!(8));
+        let result = response.result.unwrap();
+        assert_eq!(result["isError"], true);
+        let content = result["content"].as_array().unwrap();
+        assert!(content[0]["text"].as_str().unwrap().contains("expects type 'integer'"));
+    }
+
+    #[test]
+    fn test_extract_identity_labels() {
+        let meta = json!({
+            "identityLabels": {
+                "weibo": "weibo_session_1",
+                "github": "github_token_1"
+            }
+        });
+        let labels = extract_identity_labels(&meta);
+        assert_eq!(labels.len(), 2);
+        assert_eq!(labels.get("weibo").unwrap(), "weibo_session_1");
+        assert_eq!(labels.get("github").unwrap(), "github_token_1");
+    }
+
+    #[test]
+    fn test_extract_identity_labels_empty() {
+        let meta = json!({});
+        let labels = extract_identity_labels(&meta);
+        assert!(labels.is_empty());
+    }
+
+    #[test]
+    fn test_validate_arguments_required() {
+        let schema = json!({
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"]
+        });
+        let args = serde_json::Map::new();
+        let result = validate_arguments(&args, &schema);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Missing required field: query"));
+    }
+
+    #[test]
+    fn test_validate_arguments_type() {
+        let schema = json!({
+            "type": "object",
+            "properties": {"limit": {"type": "integer"}}
+        });
+        let mut args = serde_json::Map::new();
+        args.insert("limit".to_string(), json!("not_a_number"));
+        let result = validate_arguments(&args, &schema);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("expects type 'integer'"));
+    }
+
+    #[test]
+    fn test_validate_arguments_success() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "limit": {"type": "integer"}
+            },
+            "required": ["query"]
+        });
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), json!("test"));
+        args.insert("limit".to_string(), json!(10));
+        let result = validate_arguments(&args, &schema);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_type_matches() {
+        assert!(type_matches("string", "string"));
+        assert!(type_matches("number", "integer")); // integer 是 number 的子类型
+        assert!(type_matches("number", "number"));
+        assert!(type_matches("integer", "integer"));
+        assert!(!type_matches("integer", "number")); // number 不一定是 integer
+        assert!(!type_matches("string", "integer"));
     }
 
     #[test]
