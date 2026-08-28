@@ -45,17 +45,27 @@
 - **ADR-0001**：Tentacle Rust 重构 + 四修正 + 方法论迁移（Active，已覆盖 P1-P3 技术选型大方向）
 - **P4 新增 ADR 候选**：gRPC/MCP 传输层契约设计（如与 Anaphase-Helix 契约有重大偏离，需新建 ADR-0002）
 
-### 1.5 已确认决策点（P4 D1-D5 待确认）
+### 1.5 已确认决策点（P4 D1-D5 已确认）
 
 | # | 决策点 | 决议 | 状态 |
 |---|---|---|---|
-| D1 | P4 T 拆分粒度 | T1→T2→T3→T4→T5 串行，每 T 验证后再进下一个 | ⏳ 待确认 |
-| D2 | gRPC 框架选型 | tonic（Rust 生态主流，与 Anaphase-Helix 一致） | ⏳ 待确认 |
-| D3 | MCP 框架选型 | rmcp（Rust 原生 MCP 实现） | ⏳ 待确认 |
-| D4 | 插件热插拔实现 | notify crate（文件系统事件监听） | ⏳ 待确认 |
-| D5 | CI-144 接入时机 | v2.0 PAL 冻结后自然接入，不阻塞 P4 | ⏳ 待确认 |
+| D1 | P4 T 拆分粒度 | T1→T2→T3→T4→T5 串行，每 T 验证后再进下一个 | ✅ 已确认 |
+| D2 | gRPC 框架选型 | tonic（Rust 生态主流，与 Anaphase-Helix 一致） | ✅ 已确认 |
+| D3 | MCP 框架选型 | **手动实现 JSON-RPC 2.0 over stdio**（rmcp 的宏是编译时静态注册，不适合动态工具注册） | ✅ 已确认（T2 实施时修正） |
+| D4 | 插件热插拔实现 | notify crate（文件系统事件监听），可选 feature，默认不启用 | ✅ 已确认 |
+| D5 | CI-144 接入时机 | v2.0 PAL 冻结后自然接入，不阻塞 P4 | ✅ 已确认 |
 
-### 1.6 验收标准
+### 1.6 P4 进度（T1-T4 完成，T5 待执行）
+
+| 任务 | 内容 | 状态 | 测试 |
+|---|---|---|---|
+| T1 | gRPC 传输层（tonic + proto + 服务端骨架） | ✅ 完成 | 8 passed |
+| T2 | MCP 传输层（JSON-RPC 2.0 over stdio） | ✅ 完成 | 8 passed |
+| T3 | 生态对齐（identity_labels 扩展字段 + 参数 Schema 校验 + contract.md 更新） | ✅ 完成 | 17 passed（MCP） |
+| T4 | 插件热插拔（PluginWatcher + notify + 可选 hot-reload feature） | ✅ 完成 | 32 passed（core，含 hot-reload） |
+| **T5** | **全传输层集成测试（HTTP/gRPC/MCP 端到端 + 跨传输层一致性）** | **🚧 待执行** | - |
+
+### 1.7 验收标准
 
 - T1：gRPC 传输层服务端启动，manifest 索引 + execute 端点可用，proto 契约与 Anaphase-Helix 对齐
 - T2：MCP 传输层 stdio/HTTP/SSE 三种传输可用，tools/list + tools/call 端点正常
@@ -82,9 +92,8 @@
 | P1 | Rust 重构：核心骨架 + HTTP 传输层（T1-T4） | ✅ 2026-08-28（37 tests） |
 | P2 | 觅食 + 沙箱（修正2/3 落地，T1-T4） | ✅ 2026-08-29（51 tests，四修正全部兑现） |
 | P3 | 工具集成 + WASI 细化 + worker 池 + 首个内置工具 | ✅ 2026-08-29（72 tests，P3 收官） |
-| **P4** | **生态对齐 + gRPC/MCP 传输层 + 插件热插拔** | **🚧 进行中** |
+| **P4** | **生态对齐 + gRPC/MCP 传输层 + 插件热插拔** | **🚧 T1-T4 完成，T5 待执行** |
 | P5 | 性能优化 + 生产就绪（基准测试/可观测性/部署文档） | ⏳ 预览 |
-| P4 | 生态对齐 + 性能优化 + 更多传输层（gRPC/MCP） | ⏳ 预览 |
 
 ---
 
