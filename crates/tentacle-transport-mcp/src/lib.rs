@@ -88,8 +88,8 @@ impl McpServer {
         Ok(())
     }
 
-    /// 处理一条 JSON-RPC 消息
-    async fn handle_message(&self, line: &str) -> Result<Option<JsonRpcResponse>, String> {
+    /// 处理一条 JSON-RPC 消息（公开，用于集成测试）
+    pub async fn handle_message(&self, line: &str) -> Result<Option<JsonRpcResponse>, String> {
         let request: JsonRpcRequest = serde_json::from_str(line)
             .map_err(|e| format!("Invalid JSON-RPC request: {}", e))?;
 
@@ -236,13 +236,13 @@ struct JsonRpcRequest {
 }
 
 #[derive(Debug, Serialize)]
-struct JsonRpcResponse {
-    jsonrpc: String,
-    id: Value,
+pub struct JsonRpcResponse {
+    pub jsonrpc: String,
+    pub id: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
-    result: Option<Value>,
+    pub result: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<JsonRpcError>,
+    pub error: Option<JsonRpcError>,
 }
 
 impl JsonRpcResponse {

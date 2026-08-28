@@ -87,7 +87,7 @@ async fn test_http_manifest_index() {
 
     assert_eq!(response.status(), 200);
     let body: Value = response.json().await.unwrap();
-    let tools = body["tools"].as_array().unwrap();
+    let tools = body.as_array().unwrap();
     assert_eq!(tools.len(), 1);
     assert_eq!(tools[0]["name"], "echo");
     assert_eq!(tools[0]["description"], "Echo tool for integration tests");
@@ -108,7 +108,7 @@ async fn test_http_execute_tool() {
     let response = client
         .post(format!("http://{}/v1/tools/echo/execute", addr))
         .json(&json!({
-            "params": {"message": "hello http"},
+            "tool": "echo", "params": {"message": "hello http"},
             "identity_labels": {"test": "label1"}
         }))
         .send()
@@ -137,7 +137,7 @@ async fn test_http_execute_tool_not_found() {
     let client = reqwest::Client::new();
     let response = client
         .post(format!("http://{}/v1/tools/nonexistent/execute", addr))
-        .json(&json!({"params": {}}))
+        .json(&json!({"tool": "nonexistent", "params": {}}))
         .send()
         .await
         .unwrap();
@@ -366,7 +366,7 @@ async fn test_cross_transport_consistency() {
     let client = reqwest::Client::new();
     let http_response = client
         .post(format!("http://{}/v1/tools/echo/execute", http_addr))
-        .json(&json!({"params": {"message": message}}))
+        .json(&json!({"tool": "echo", "params": {"message": message}}))
         .send()
         .await
         .unwrap();
@@ -446,7 +446,7 @@ async fn test_cross_transport_manifest_consistency() {
         .await
         .unwrap();
     let http_body: Value = http_response.json().await.unwrap();
-    let http_name = http_body["tools"][0]["name"].as_str().unwrap();
+    let http_name = http_body[0]["name"].as_str().unwrap();
 
     // gRPC
     use tentacle_transport_grpc::proto::tentacle_service_client::TentacleServiceClient;
@@ -464,7 +464,8 @@ async fn test_cross_transport_manifest_consistency() {
         "method": "tools/list"
     });
     let mcp_response = mcp_server.handle_message(&mcp_request.to_string()).await.unwrap().unwrap();
-    let mcp_name = mcp_response.result.unwrap()["tools"][0]["name"].as_str().unwrap();
+    let mcp_result = mcp_response.result.unwrap();
+    let mcp_name = mcp_result["tools"][0]["name"].as_str().unwrap();
 
     // 验证三传输层说明书索引一致
     assert_eq!(http_name, "echo");
