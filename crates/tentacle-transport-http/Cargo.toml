@@ -17,3 +17,4 @@ async-stream = "0.3"
 
 [dev-dependencies]
 tempfile = "3"
+tentacle-tools = { path = "../tentacle-tools", features = ["runtime"] }
