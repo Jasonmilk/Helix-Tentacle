@@ -67,7 +67,12 @@ pub struct ForagingEvaluator {
 - **分词策略**：英文按非字母数字分割（长度≥2，转小写）；中文用字符级 2-Gram 滑窗（CJK 统一表意文字/平假名/片假名/韩文），不引入重型字典，保持零依赖下的足够鲁棒性
 
 ### 3.4 协程沙箱（T06）
-- JS：固定 worker 池（默认绑定物理核）+ QuickJS 多 context 单线程协程调度（P2-T4 实现）
+- JS：QuickJS 沙箱（**P2-T4 已实现**，rquickjs + 独立线程 + 协变中断）
+  - 独立线程执行：不阻塞主线程，线程级兜底超时
+  - 协变中断：`set_interrupt_handler` + `AtomicBool`，JS 执行到安全点时检查取消信号
+  - 内存限制：`set_memory_limit`（默认 50MB），防止 JS 代码耗尽内存
+  - 危险 API 移除：rquickjs 默认不提供 require/import/文件/网络 API（需显式启用 loader feature）
+  - 结果转换：按 Value 类型（String/Bool/Int/Float/Null/Undefined/Object）转换为字符串
 - `set_interrupt_handler` + `AtomicBool` + `CancellationToken` → 协程级协作终止
 - `JS_SetMemoryLimit` 限内存；移除 require/import 和文件/网络 API
 - WASM：wasmtime + `epoch_deadline`（**P2-T3 已实现**，纯 WASM 零外部访问）
