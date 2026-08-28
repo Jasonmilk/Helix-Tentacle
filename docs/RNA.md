@@ -50,7 +50,8 @@
 5. **决策拦截**：架构/接口变更时，提示创建 `docs/decisions/NNNN-xxx.md`。
 6. **原子重构**：修改函数签名时，列出所有调用方；≤5 处本轮修复，>5 处生成脚本。
 7. **消灭魔法**：禁止硬编码阈值，全部走配置。觅食阈值、最大页面数、沙箱内存限制等必须可配置。
-8. **凭证红线**：Tentacle 内存中永远不出现明文 Cookie/Token/API Key。只流转 `identity_label`，明文凭证由 Tuck 在物理边缘注入。代码审查时 grep 明文凭证字段。
+8. **认识论螺旋**：理解"只追加不修改"不是简单堆积，而是通过 `CORRECTS` / `REFINES` / `DOUBTS` 辩证边实现时间轴上的螺旋上升。
+9. **凭证红线**：Tentacle 内存中永远不出现明文 Cookie/Token/API Key。只流转 `identity_label`，明文凭证由 Tuck 在物理边缘注入。代码审查时 grep 明文凭证字段。
 
 ## 大版本更新 SOP
 
@@ -79,3 +80,4 @@
 ## EVOLUTION
 
 - v1.0 (2026-08-28): 从 VISION/SPEC 脱水，三层加载协议定稿，AI 协作铁律增加凭证红线（第8条），与 Helix-Mind/Anaphase-Helix 方法论结构对齐
+- v1.1 (2026-08-29): 补全 DNA 方法论通用铁律第8条"认识论螺旋"（遗漏修复），凭证红线移至第9条（Tentacle 特有）。AI 协作铁律从 8 条补全为 9 条（8 通用 + 1 特有），与 Helix-Mind/Anaphase-Helix 完全对齐
