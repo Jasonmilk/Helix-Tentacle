@@ -1,7 +1,7 @@
 # Helix-Tentacle 开发导航牌（PLAN）
 
-> **版本**：v1.3（P2→P3 流转，2026-08-29）
-> **状态**：🚧 P3 工具集成 + WASI 细化 + worker 池优化（T1 待启动）
+> **版本**：v1.4（P3-T1 完成，T2 待启动，2026-08-29）
+> **状态**：🚧 P3 工具集成（T1✅ WASI 细化，T2⏳ worker 池优化）
 > **分支**：rs
 > **所属方法论**：DNA 自生长方法论 v2.0（PLAN 动态流转闭环）
 > **规则**：本文件只含当前阶段 + 下一阶段预览 + 阶段总览地图。完成阶段 → GROWTH.md。总行数 ≤150，超出触发历史迁移。
@@ -10,25 +10,25 @@
 
 ## 1. 当前阶段：P3 — 工具集成 + WASI 细化 + worker 池优化
 
-> **状态**：🚧 规划中，T1 待用户确认后启动。
+> **状态**：🚧 T1 已完成（WASI 细化），T2 待用户确认后启动（worker 池优化）。
 
 ### 1.1 目标（基于白皮书 v3.4 + P2 遗留细化）
 
 | 任务 | 内容 | 入口 | 状态 |
 |---|---|---|---|
-| T1 | WASI 细化：WASM 沙箱接入 wasmtime-wasi（stdout 捕获 + 文件系统权限按 Manifest 配置） | P2-T3 遗留 | ⏳ 待启动 |
-| T2 | worker 池优化：JS 沙箱从"每次独立线程"升级为"固定 worker 池 + 多 context 单线程协程调度" | P2-T4 遗留/白皮书 §6.3 | ⏳ |
+| T1 | WASI 细化：WASM 沙箱接入 wasmtime-wasi（stdout 捕获 + 文件系统权限按 Manifest 配置） | P2-T3 遗留 | ✅ 完成（d095766，10 tests） |
+| T2 | worker 池优化：JS 沙箱从"每次独立线程"升级为"固定 worker 池 + 多 context 单线程协程调度" | P2-T4 遗留/白皮书 §6.3 | ⏳ 待启动 |
 | T3 | 工具执行引擎集成：Manifest 完整性校验 + 插件目录扫描 + 渐进披露索引与执行层对接（WASM/JS 插件加载执行） | P1-T3 + 白皮书 §3.2 | ⏳ |
 | T4 | 首个内置工具 `targeted_scraper`：定向爬取 + 渐进式觅食 + 布隆过滤器端到端验证 | 白皮书 §3.4/附录 A | ⏳ |
 | T5 | 传输层集成测试：HTTP/MCP/gRPC 传输层调用工具执行引擎的完整链路测试 | P1-T4 + 白皮书 §3.2 | ⏳ |
 
-### 1.2 代码真相源（P3 调研结论）
+### 1.2 代码真相源（P3 调研结论 + T1 完成状态）
 
-- **WASI 细化**：P2-T3 已实现纯 WASM 沙箱（wasmtime + epoch_deadline），但未接入 wasmtime-wasi。wasmtime-wasi v26 API 复杂（`WasiP1Ctx` 无公开构造、`preview1::add_to_linker_sync`），需在 P3-T1 仔细处理
-- **worker 池**：P2-T4 已实现 JS 沙箱（rquickjs + 独立线程 + 协变中断），但每次执行创建新线程。白皮书 §6.3 要求"固定 worker 池（默认绑定物理核）+ QuickJS 多 context 单线程协程调度"，需在 P3-T2 升级
-- **工具执行引擎**：P1-T3 已实现 Manifest 完整性校验 + 插件目录扫描 + 渐进披露索引，但未与执行层（WASM/JS 沙箱）对接。P3-T3 需实现 `ToolExecutor`：根据 Manifest 类型加载 WASM/JS 执行体，调用沙箱执行
-- **targeted_scraper**：白皮书 §3.4 已有完整设计，ForagingEvaluator 已在 P2-T1 实现。P3-T4 需实现 HTTP 客户端（tentacle-http crate）+ 渐进式觅食集成 + 布隆过滤器对接
-- **传输层集成**：P1-T4 已实现 HTTP 传输层（axum 四端点），但 execute 端点未对接真实工具执行引擎。P3-T5 需实现端到端链路
+- **WASI 细化（T1 ✅ 已完成）**：已接入 wasmtime-wasi v26 preview1。stdout 用 MemoryOutputPipe 捕获到内存（可 clone，执行后 contents() 获取）；文件系统用 preopened_dir 按 manifest.permissions.filesystem 配置（支持 read:/write:/rw: 前缀）；未声明目录无法访问，越权即拒绝。Store data = WasiP1Ctx，preview1::add_to_linker_sync 链接 WASI 函数
+- **worker 池（T2 ⏳ 待启动）**：P2-T4 已实现 JS 沙箱（rquickjs + 独立线程 + 协变中断），但每次执行创建新线程。白皮书 §6.3 要求"固定 worker 池（默认绑定物理核）+ QuickJS 多 context 单线程协程调度"，需在 P3-T2 升级
+- **工具执行引擎（T3 ⏳）**：P1-T3 已实现 Manifest 完整性校验 + 插件目录扫描 + 渐进披露索引，但未与执行层（WASM/JS 沙箱）对接。P3-T3 需实现 `ToolExecutor`：根据 Manifest 类型加载 WASM/JS 执行体，调用沙箱执行
+- **targeted_scraper（T4 ⏳）**：白皮书 §3.4 已有完整设计，ForagingEvaluator 已在 P2-T1 实现。P3-T4 需实现 HTTP 客户端（tentacle-http crate）+ 渐进式觅食集成 + 布隆过滤器对接
+- **传输层集成（T5 ⏳）**：P1-T4 已实现 HTTP 传输层（axum 四端点），但 execute 端点未对接真实工具执行引擎。P3-T5 需实现端到端链路
 
 ### 1.3 四修正状态（全部兑现）
 
@@ -43,14 +43,14 @@
 
 - **ADR-0001**：Tentacle Rust 重构 + 四修正 + 方法论迁移（Active，已覆盖 P3 技术选型大方向，无需额外 ADR）
 
-### 1.5 待用户审查的决策点
+### 1.5 已确认决策点（D1-D4 全部通过）
 
-| # | 决策点 | 建议 | 状态 |
+| # | 决策点 | 决议 | 状态 |
 |---|---|---|---|
-| D1 | P3 T 拆分粒度 | T1 WASI → T2 worker 池 → T3 工具执行引擎 → T4 targeted_scraper → T5 传输层集成（串行，每 T 验证后再进下一个） | 待确认 |
-| D2 | WASI 实现方式 | wasmtime-wasi v26 preview1 API（stdout 捕获 + preopened_dir 按 Manifest permissions 配置） | 待确认 |
-| D3 | worker 池大小 | 默认与物理核数绑定（`std::thread::available_parallelism`），可配置 | 待确认 |
-| D4 | targeted_scraper HTTP 客户端 | tentacle-http crate（已存在骨架），支持 TLS 指纹模拟 + 反检测策略 | 待确认 |
+| D1 | P3 T 拆分粒度 | T1→T2→T3→T4→T5 串行，每 T 验证后再进下一个 | ✅ 已确认 |
+| D2 | WASI 实现方式 | wasmtime-wasi v26 preview1 API（stdout 捕获 + preopened_dir 按 Manifest permissions 配置） | ✅ 已确认（T1 已落地） |
+| D3 | worker 池大小 | 默认与物理核数绑定（`std::thread::available_parallelism`），可配置 | ✅ 已确认（T2 落地） |
+| D4 | targeted_scraper HTTP 客户端 | tentacle-http crate（已存在骨架），支持 TLS 指纹模拟 + 反检测策略 | ✅ 已确认（T4 落地） |
 
 ### 1.6 验收标准
 
