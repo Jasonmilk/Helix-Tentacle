@@ -74,12 +74,15 @@ pub struct ForagingEvaluator {
   - 未声明的目录无法访问，越权即拒绝；预打开不存在的目录返回 PreopenDir 错误
   - epoch 递增线程（10ms/次）+ `set_epoch_deadline` → 超时强制终止
   - `WasmSandbox` 可复用：一个实例执行多个模块，独立 Store 内存隔离
-- JS：QuickJS 沙箱（**P2-T4 已实现**，rquickjs + 独立线程 + 协变中断）
-  - 独立线程执行：不阻塞主线程，线程级兜底超时
-  - 协变中断：`set_interrupt_handler` + `AtomicBool`，JS 执行到安全点时检查取消信号
-  - 内存限制：`set_memory_limit`（默认 50MB），防止 JS 代码耗尽内存
-  - 危险 API 移除：rquickjs 默认不提供 require/import/文件/网络 API
-  - worker 池优化 → P3-T2 实现
+- JS：QuickJS 沙箱（**P3-T2 worker 池已实现**，rquickjs + 固定 worker 池 + 可复用 Runtime/Context + 协变中断）
+  - 固定 worker 池：默认大小 = 物理核数（available_parallelism），可配置（with_workers）
+  - 可复用 Runtime/Context：每个 worker 线程持有 1 个 Runtime + 1 个 Context，不每次创建
+  - round-robin 任务分配：多 worker 并行利用多核，每个 worker 串行执行（JS 单线程模型）
+  - 协变中断：每个任务独立 AtomicBool 取消信号，任务开始时更新中断处理器
+  - 内存限制：set_memory_limit（默认 50MB）
+  - 危险 API 移除：rquickjs 默认无 require/import/文件/网络
+  - 超时优化：分段 sleep（10ms）+ done 标志，任务完成后定时器线程快速退出（不阻塞 worker）
+  - 兜底超时：recv_timeout(timeout_ms + 1s)，防止 worker 卡死
 
 ## 四、降级策略
 

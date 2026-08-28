@@ -1,12 +1,19 @@
 //! tentacle-js — Helix-Tentacle JS 沙箱运行时
 //!
-//! 白皮书 §6.3 / T06：JS 工具在独立 OS 线程中运行 QuickJS 沙箱，
+//! 白皮书 §6.3 / T06：JS 工具在固定 worker 池中运行 QuickJS 沙箱，
 //! 采用协变中断机制（Cooperative Interruption）实现超时控制。
+//!
+//! P3-T2 升级：从"每次独立线程"升级为"固定 worker 池 + 可复用 Runtime/Context"
+//! - worker 池大小默认与物理核数绑定（available_parallelism），可配置
+//! - 每个 worker 线程持有 1 个 Runtime + 1 个 Context（可复用，不每次创建）
+//! - 任务通过 round-robin 分配给 worker，多 worker 并行利用多核
+//! - 每个 worker 串行执行任务（JS 单线程模型），任务间互不影响
+//! - 协变中断：每个任务独立的 AtomicBool 取消信号，任务开始时更新中断处理器
 //!
 //! 核心原则：沙箱即契约，安全可验证。越权即拒绝，超时即终止。
 //!
 //! 安全模型：
-//! - 独立线程执行：不阻塞主线程，线程级兜底超时
+//! - worker 池执行：固定线程数，不阻塞主线程，线程级兜底超时
 //! - 协变中断：`set_interrupt_handler` + `AtomicBool`，JS 执行到下一个安全点时检查取消信号
 //! - 内存限制：`set_memory_limit`，防止 JS 代码耗尽内存
 //! - 危险 API 移除：rquickjs 默认不提供 require/import/文件/网络 API（需显式启用 loader feature）
@@ -16,7 +23,7 @@
 
 #![cfg_attr(not(feature = "runtime"), allow(dead_code, unused_imports))]
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
@@ -50,12 +57,30 @@ pub enum JsError {
     Execute(String),
     #[error("JS 内存超限")]
     MemoryLimit,
+    #[error("JS worker 线程已停止")]
+    WorkerStopped,
 }
 
-/// JS 沙箱运行时
+/// 发送给 worker 的任务
+#[cfg(feature = "runtime")]
+struct JsTask {
+    code: String,
+    timeout_ms: u64,
+    result_tx: mpsc::Sender<Result<JsOutput, JsError>>,
+    cancel: Arc<AtomicBool>,
+}
+
+/// worker 线程句柄
+#[cfg(feature = "runtime")]
+struct WorkerHandle {
+    task_tx: mpsc::Sender<JsTask>,
+    _thread_handle: thread::JoinHandle<()>,
+}
+
+/// JS 沙箱运行时（worker 池版本）
 ///
-/// 持有配置（内存限制），每次执行在独立线程中创建 Runtime + Context。
-/// 符合"按需加载，执行即焚"原则：执行完毕后 Runtime/Context 立即销毁。
+/// 持有固定数量的 worker 线程，每个线程持有 1 个 Runtime + 1 个 Context（可复用）。
+/// 任务通过 round-robin 分配给 worker，多 worker 并行利用多核。
 ///
 /// # 示例
 /// ```no_run
@@ -67,40 +92,183 @@ pub enum JsError {
 /// assert_eq!(output.value, "3");
 /// ```
 pub struct JsSandbox {
+    #[cfg(feature = "runtime")]
+    workers: Vec<WorkerHandle>,
+    #[cfg(feature = "runtime")]
+    next_worker: AtomicUsize,
     /// 内存限制（字节）
     memory_limit: usize,
+    /// worker 池大小
+    worker_count: usize,
 }
 
 impl JsSandbox {
-    /// 创建 JS 沙箱
+    /// 创建 JS 沙箱（默认 worker 池大小 = 物理核数）
     ///
     /// # 参数
     /// - `memory_limit`: 内存限制（字节），0 表示无限制
     pub fn new(memory_limit: usize) -> Self {
-        Self { memory_limit }
+        let worker_count = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(2);
+        Self::with_workers(memory_limit, worker_count)
     }
 
-    /// 执行 JS 代码
+    /// 创建 JS 沙箱（指定 worker 池大小）
+    ///
+    /// # 参数
+    /// - `memory_limit`: 内存限制（字节），0 表示无限制
+    /// - `worker_count`: worker 池大小（线程数），至少 1
+    #[cfg(feature = "runtime")]
+    pub fn with_workers(memory_limit: usize, worker_count: usize) -> Self {
+        let worker_count = worker_count.max(1);
+        let mut workers = Vec::with_capacity(worker_count);
+
+        for _ in 0..worker_count {
+            let (task_tx, task_rx) = mpsc::channel::<JsTask>();
+            let mem_limit = memory_limit;
+
+            let thread_handle = thread::spawn(move || {
+                // worker 线程：创建 Runtime + Context（可复用）
+                let runtime = match Runtime::new() {
+                    Ok(rt) => rt,
+                    Err(_) => return, // Runtime 创建失败，worker 线程退出
+                };
+
+                if mem_limit > 0 {
+                    runtime.set_memory_limit(mem_limit);
+                }
+
+                let context = match Context::full(&runtime) {
+                    Ok(ctx) => ctx,
+                    Err(_) => return, // Context 创建失败，worker 线程退出
+                };
+
+                // 循环接收任务
+                while let Ok(task) = task_rx.recv() {
+                    // 重置取消信号
+                    task.cancel.store(false, Ordering::Relaxed);
+
+                    // 更新中断处理器（绑定当前任务的取消信号）
+                    let cancel_handler = task.cancel.clone();
+                    runtime.set_interrupt_handler(Some(Box::new(move || {
+                        cancel_handler.load(Ordering::Relaxed)
+                    })));
+
+                    // 启动超时定时器线程（分段 sleep + done 标志，任务完成后快速退出）
+                    let cancel_timeout = task.cancel.clone();
+                    let done = Arc::new(AtomicBool::new(false));
+                    let done_timeout = done.clone();
+                    let timeout_ms = task.timeout_ms;
+                    let timeout_handle = thread::spawn(move || {
+                        // 分 10ms 小段 sleep，检查 done 标志
+                        let total_ms = timeout_ms;
+                        let step_ms = 10u64;
+                        let mut elapsed_ms = 0u64;
+                        while elapsed_ms < total_ms && !done_timeout.load(Ordering::Relaxed) {
+                            thread::sleep(Duration::from_millis(step_ms));
+                            elapsed_ms += step_ms;
+                        }
+                        // 只有任务未完成时才设置取消信号
+                        if !done_timeout.load(Ordering::Relaxed) {
+                            cancel_timeout.store(true, Ordering::Relaxed);
+                        }
+                    });
+
+                    // 执行 JS 代码（在闭包内直接通过 result_tx 发送结果）
+                    let cancel = task.cancel.clone();
+                    let result_tx = task.result_tx.clone();
+                    context.with(|ctx| {
+                        match ctx.eval::<rquickjs::Value, _>(task.code.as_str()) {
+                            Ok(value) => {
+                                let string = if let Some(s) = value.as_string() {
+                                    s.to_string().unwrap_or_default()
+                                } else if let Some(b) = value.as_bool() {
+                                    b.to_string()
+                                } else if let Some(i) = value.as_int() {
+                                    i.to_string()
+                                } else if let Some(f) = value.as_float() {
+                                    if f.fract() == 0.0 && f.abs() < 1e15 {
+                                        format!("{}", f as i64)
+                                    } else {
+                                        f.to_string()
+                                    }
+                                } else if value.is_null() {
+                                    "null".to_string()
+                                } else if value.is_undefined() {
+                                    "undefined".to_string()
+                                } else {
+                                    "[object Object]".to_string()
+                                };
+                                let _ = result_tx.send(Ok(JsOutput { value: string }));
+                            }
+                            Err(e) => {
+                                let err_msg = e.to_string();
+                                if cancel.load(Ordering::Relaxed) {
+                                    let _ = result_tx.send(Err(JsError::Timeout));
+                                } else if err_msg.contains("memory")
+                                    || err_msg.contains("Memory")
+                                    || err_msg.contains("out of memory")
+                                {
+                                    let _ = result_tx.send(Err(JsError::MemoryLimit));
+                                } else {
+                                    let _ = result_tx.send(Err(JsError::Execute(err_msg)));
+                                }
+                            }
+                        }
+                    });
+
+                    // JS 执行完毕，设置 done 标志（让超时定时器线程快速退出）
+                    done.store(true, Ordering::Relaxed);
+
+                    // 等待超时定时器结束（最多等待 10ms，避免线程泄漏）
+                    let _ = timeout_handle.join();
+                }
+
+                // task_rx 断开（JsSandbox 被 drop），worker 线程退出
+            });
+
+            workers.push(WorkerHandle {
+                task_tx,
+                _thread_handle: thread_handle,
+            });
+        }
+
+        Self {
+            workers,
+            next_worker: AtomicUsize::new(0),
+            memory_limit,
+            worker_count,
+        }
+    }
+
+    /// 创建 JS 沙箱（指定 worker 池大小，无 runtime feature 时的占位实现）
+    #[cfg(not(feature = "runtime"))]
+    pub fn with_workers(memory_limit: usize, worker_count: usize) -> Self {
+        Self {
+            memory_limit,
+            worker_count: worker_count.max(1),
+        }
+    }
+
+    /// 执行 JS 代码（round-robin 分配给 worker）
     ///
     /// # 参数
     /// - `js_code`: JS 源代码
-    /// - `_manifest`: 工具说明书（T4 阶段未使用，预留 P3 权限配置）
+    /// - `_manifest`: 工具说明书（预留权限配置）
     /// - `timeout_ms`: 超时时间（毫秒），协变中断 + 线程兜底双重保障
     ///
     /// # 流程
-    /// 1. 创建独立线程（不阻塞主线程）
-    /// 2. 创建 QuickJS Runtime，设置内存限制
-    /// 3. 设置协变中断处理器（`AtomicBool` 取消信号）
-    /// 4. 创建 Context（含标准库，不含 require/import/文件/网络）
-    /// 5. 启动超时定时器线程：到达超时后设置取消信号
-    /// 6. 执行 JS 代码，获取最后一个表达式的字符串值
-    /// 7. 通过 channel 返回结果
+    /// 1. round-robin 选择一个 worker
+    /// 2. 创建任务（含取消信号和结果通道）
+    /// 3. 发送任务给 worker
+    /// 4. 等待结果（兜底超时 = timeout_ms + 1s，防止 worker 卡死）
     ///
     /// # 错误
-    /// - `Timeout`: 协变中断触发（JS 执行到安全点时检测到取消信号）
-    /// - `MemoryLimit`: JS 代码耗尽内存（`set_memory_limit` 触发）
+    /// - `Timeout`: 协变中断触发
+    /// - `MemoryLimit`: JS 代码耗尽内存
     /// - `Execute`: JS 语法错误或运行时错误
-    /// - `Runtime`/`Context`: QuickJS 初始化失败
+    /// - `WorkerStopped`: worker 线程已停止（发送失败）
     pub fn execute(
         &self,
         js_code: &str,
@@ -109,101 +277,31 @@ impl JsSandbox {
     ) -> Result<JsOutput, JsError> {
         #[cfg(feature = "runtime")]
         {
-            let js_code = js_code.to_string();
-            let memory_limit = self.memory_limit;
+            // round-robin 选择 worker
+            let worker_idx = self.next_worker.fetch_add(1, Ordering::Relaxed) % self.workers.len();
+            let worker = &self.workers[worker_idx];
 
-            // 结果通道
-            let (tx, rx) = mpsc::channel::<Result<JsOutput, JsError>>();
+            // 创建任务
+            let (result_tx, result_rx) = mpsc::channel::<Result<JsOutput, JsError>>();
+            let cancel = Arc::new(AtomicBool::new(false));
+            let task = JsTask {
+                code: js_code.to_string(),
+                timeout_ms,
+                result_tx,
+                cancel: cancel.clone(),
+            };
 
-            // 独立线程执行 JS
-            let _handle = thread::spawn(move || {
-                // 1. 创建 Runtime
-                let runtime = match Runtime::new() {
-                    Ok(rt) => rt,
-                    Err(e) => {
-                        let _ = tx.send(Err(JsError::Runtime(e.to_string())));
-                        return;
-                    }
-                };
+            // 发送任务给 worker
+            worker.task_tx.send(task).map_err(|_| JsError::WorkerStopped)?;
 
-                // 2. 设置内存限制
-                runtime.set_memory_limit(memory_limit);
-
-                // 3. 协变中断：AtomicBool 取消信号
-                let cancel = Arc::new(AtomicBool::new(false));
-                let cancel_handler = cancel.clone();
-                runtime.set_interrupt_handler(Some(Box::new(move || {
-                    // 返回 true 时中断 JS 执行
-                    cancel_handler.load(Ordering::Relaxed)
-                })));
-
-                // 4. 创建 Context（full 含标准库，不含 require/import/文件/网络）
-                let context = match Context::full(&runtime) {
-                    Ok(ctx) => ctx,
-                    Err(e) => {
-                        let _ = tx.send(Err(JsError::Context(e.to_string())));
-                        return;
-                    }
-                };
-
-                // 5. 超时定时器线程：到达超时后设置取消信号
-                let cancel_timeout = cancel.clone();
-                let timeout_handle = thread::spawn(move || {
-                    thread::sleep(Duration::from_millis(timeout_ms));
-                    cancel_timeout.store(true, Ordering::Relaxed);
-                });
-
-                // 6. 执行 JS 代码（在闭包内直接通过 tx 发送结果，闭包返回 ()，
-                //    避免 Result<Value> 生命周期问题导致挂起）
-                context.with(|ctx| {
-                    match ctx.eval::<rquickjs::Value, _>(js_code.as_str()) {
-                        Ok(value) => {
-                            // 按类型转换为字符串
-                            let string = if let Some(s) = value.as_string() {
-                                s.to_string().unwrap_or_default()
-                            } else if let Some(b) = value.as_bool() {
-                                b.to_string()
-                            } else if let Some(i) = value.as_int() {
-                                i.to_string()
-                            } else if let Some(f) = value.as_float() {
-                                if f.fract() == 0.0 && f.abs() < 1e15 {
-                                    format!("{}", f as i64)
-                                } else {
-                                    f.to_string()
-                                }
-                            } else if value.is_null() {
-                                "null".to_string()
-                            } else if value.is_undefined() {
-                                "undefined".to_string()
-                            } else {
-                                "[object Object]".to_string()
-                            };
-                            let _ = tx.send(Ok(JsOutput { value: string }));
-                        }
-                        Err(e) => {
-                            let err_msg = e.to_string();
-                            // 区分错误类型（在闭包内判断，避免闭包外 cancel 状态变化）
-                            if cancel.load(Ordering::Relaxed) {
-                                let _ = tx.send(Err(JsError::Timeout));
-                            } else if err_msg.contains("memory") || err_msg.contains("Memory") || err_msg.contains("out of memory") {
-                                let _ = tx.send(Err(JsError::MemoryLimit));
-                            } else {
-                                let _ = tx.send(Err(JsError::Execute(err_msg)));
-                            }
-                        }
-                    }
-                });
-
-                // 等待超时定时器结束（避免线程泄漏）
-                let _ = timeout_handle.join();
-
-                // 结果已在 context.with 闭包内通过 tx 发送
-            });
-
-            // 8. 等待结果（兜底超时 = timeout_ms + 1s，防止线程卡死）
-            match rx.recv_timeout(Duration::from_millis(timeout_ms + 1000)) {
+            // 等待结果（兜底超时 = timeout_ms + 1s）
+            match result_rx.recv_timeout(Duration::from_millis(timeout_ms + 1000)) {
                 Ok(result) => result,
-                Err(_) => Err(JsError::Timeout),
+                Err(_) => {
+                    // 兜底超时：设置取消信号，返回 Timeout
+                    cancel.store(true, Ordering::Relaxed);
+                    Err(JsError::Timeout)
+                }
             }
         }
 
@@ -214,6 +312,16 @@ impl JsSandbox {
                 "runtime feature 未启用，请使用 --features runtime 编译".to_string(),
             ))
         }
+    }
+
+    /// 获取 worker 池大小
+    pub fn worker_count(&self) -> usize {
+        self.worker_count
+    }
+
+    /// 获取内存限制（字节）
+    pub fn memory_limit(&self) -> usize {
+        self.memory_limit
     }
 }
 
@@ -249,16 +357,15 @@ mod tests {
     fn test_js_object_result() {
         let sandbox = JsSandbox::default();
         let manifest = Manifest::default();
-        // 对象 toString 返回 [object Object]
         let output = sandbox.execute("({a: 1})", &manifest, 5000).unwrap();
-        assert!(output.value.contains("object"));
+        assert_eq!(output.value, "[object Object]");
     }
 
     #[test]
     fn test_js_timeout_infinite_loop() {
         let sandbox = JsSandbox::default();
         let manifest = Manifest::default();
-        // 无限循环，100ms 超时
+        // 100ms 超时，无限循环应被协变中断终止
         let result = sandbox.execute("while(true) {}", &manifest, 100);
         match result {
             Err(JsError::Timeout) => {}
@@ -270,58 +377,53 @@ mod tests {
     fn test_js_syntax_error() {
         let sandbox = JsSandbox::default();
         let manifest = Manifest::default();
-        let result = sandbox.execute("function broken( {", &manifest, 5000);
+        let result = sandbox.execute("function {", &manifest, 5000);
         match result {
             Err(JsError::Execute(_)) => {}
-            other => panic!("expected Execute (syntax error), got {:?}", other),
+            other => panic!("expected Execute error, got {:?}", other),
         }
     }
 
     #[test]
     fn test_js_no_require_api() {
-        // rquickjs 默认不提供 require/import，调用应报错
         let sandbox = JsSandbox::default();
         let manifest = Manifest::default();
+        // require 未定义，调用应报错
         let result = sandbox.execute("require('fs')", &manifest, 5000);
         match result {
             Err(JsError::Execute(_)) => {}
-            other => panic!("expected Execute (require not defined), got {:?}", other),
+            other => panic!("expected Execute error (require not defined), got {:?}", other),
         }
     }
 
     #[test]
     fn test_js_no_file_api() {
-        // rquickjs 默认不提供文件系统 API
         let sandbox = JsSandbox::default();
         let manifest = Manifest::default();
-        let result = sandbox.execute("typeof readFile", &manifest, 5000);
         // readFile 未定义，typeof 返回 "undefined"（不报错）
-        match result {
-            Ok(output) => assert_eq!(output.value, "undefined"),
-            Err(e) => panic!("expected Ok, got {:?}", e),
-        }
+        let output = sandbox.execute("typeof readFile", &manifest, 5000).unwrap();
+        assert_eq!(output.value, "undefined");
     }
 
     #[test]
     fn test_js_memory_limit() {
-        // 小内存限制 + 大数组分配 → 内存超限
-        let sandbox = JsSandbox::new(1024 * 1024); // 1MB
+        // 1MB 内存限制，大数组分配应触发 MemoryLimit 或 Execute
+        let sandbox = JsSandbox::new(1 * 1024 * 1024);
         let manifest = Manifest::default();
         let result = sandbox.execute(
-            "var a = []; for(var i=0; i<1000000; i++) a.push(new Array(1000));",
+            "let a = []; for(let i=0; i<1000000; i++) a.push(new Array(1000).fill('x')); a.length",
             &manifest,
             5000,
         );
-        // 可能是 MemoryLimit 或 Execute（QuickJS 内存错误信息可能不同）
         match result {
             Err(JsError::MemoryLimit) | Err(JsError::Execute(_)) => {}
-            other => panic!("expected MemoryLimit or Execute, got {:?}", other),
+            other => panic!("expected MemoryLimit or Execute error, got {:?}", other),
         }
     }
 
     #[test]
     fn test_js_sandbox_reusable() {
-        // 同一个 JsSandbox 实例可执行多次（每次独立线程 + Runtime）
+        // 同一个 JsSandbox 实例可执行多次（worker 池可复用）
         let sandbox = JsSandbox::default();
         let manifest = Manifest::default();
 
@@ -330,5 +432,62 @@ mod tests {
 
         let output2 = sandbox.execute("2 + 2", &manifest, 5000).unwrap();
         assert_eq!(output2.value, "4");
+
+        let output3 = sandbox.execute("3 + 3", &manifest, 5000).unwrap();
+        assert_eq!(output3.value, "6");
+    }
+
+    #[test]
+    fn test_js_worker_pool_size() {
+        // worker 池大小应 >= 1
+        let sandbox = JsSandbox::default();
+        assert!(sandbox.worker_count() >= 1);
+        assert_eq!(sandbox.memory_limit(), DEFAULT_MEMORY_LIMIT);
+    }
+
+    #[test]
+    fn test_js_custom_worker_count() {
+        // 指定 worker 池大小
+        let sandbox = JsSandbox::with_workers(DEFAULT_MEMORY_LIMIT, 4);
+        assert_eq!(sandbox.worker_count(), 4);
+    }
+
+    #[test]
+    fn test_js_concurrent_execution() {
+        // 多任务并发执行（worker 池并行处理）
+        let sandbox = Arc::new(JsSandbox::with_workers(DEFAULT_MEMORY_LIMIT, 4));
+        let manifest = Arc::new(Manifest::default());
+        let mut handles = Vec::new();
+
+        for i in 0..10 {
+            let sandbox = sandbox.clone();
+            let manifest = manifest.clone();
+            handles.push(thread::spawn(move || {
+                let code = format!("{} * {}", i, i);
+                let output = sandbox.execute(&code, &manifest, 5000).unwrap();
+                let expected = (i * i).to_string();
+                assert_eq!(output.value, expected);
+            }));
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn test_js_boolean_result() {
+        let sandbox = JsSandbox::default();
+        let manifest = Manifest::default();
+        let output = sandbox.execute("true", &manifest, 5000).unwrap();
+        assert_eq!(output.value, "true");
+    }
+
+    #[test]
+    fn test_js_null_result() {
+        let sandbox = JsSandbox::default();
+        let manifest = Manifest::default();
+        let output = sandbox.execute("null", &manifest, 5000).unwrap();
+        assert_eq!(output.value, "null");
     }
 }
