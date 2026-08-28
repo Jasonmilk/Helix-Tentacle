@@ -167,11 +167,20 @@ pub fn parse_manifest(json: &str) -> Result<Manifest, serde_json::Error> {
     serde_json::from_str(json)
 }
 
-/// 计算执行体的 SHA-256（纯 Rust 实现，无外部依赖）
-///
-/// 注意：core 层不引入 sha2 crate 以保持 <500KB。
-/// 实际 SHA-256 计算由 tentacle-tools 或传输层注入。
-/// 此处提供占位接口，实际实现通过依赖注入。
+/// 计算数据的 SHA-256 哈希，返回十六进制字符串
+pub fn compute_sha256(data: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    hex::encode(hasher.finalize())
+}
+
+/// 计算文件的 SHA-256 哈希
+pub fn compute_file_sha256(path: &Path) -> Result<String, crate::error::RegistryError> {
+    let data = std::fs::read(path)?;
+    Ok(compute_sha256(&data))
+}
+
+/// 校验 Manifest 声明的哈希与实际哈希是否一致
 pub fn verify_integrity(
     manifest: &Manifest,
     actual_hash: &str,
@@ -184,6 +193,22 @@ pub fn verify_integrity(
         });
     }
     Ok(())
+}
+
+/// 校验执行体文件的完整性（读取文件 → 计算 SHA-256 → 与 Manifest 比对）
+pub fn verify_file_integrity(
+    manifest: &Manifest,
+    plugin_dir: &Path,
+) -> Result<(), crate::error::RegistryError> {
+    let exe_path = plugin_dir.join(&manifest.executable);
+    if !exe_path.exists() {
+        return Err(crate::error::RegistryError::InvalidManifest(format!(
+            "executable not found: {} (for tool {})",
+            manifest.executable, manifest.name
+        )));
+    }
+    let actual_hash = compute_file_sha256(&exe_path)?;
+    verify_integrity(manifest, &actual_hash)
 }
 
 #[cfg(test)]
