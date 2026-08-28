@@ -18,3 +18,5 @@ async-stream = "0.3"
 [dev-dependencies]
 tempfile = "3"
 tentacle-tools = { path = "../tentacle-tools", features = ["runtime"] }
+tentacle-wasm = { path = "../tentacle-wasm", features = ["runtime"] }
+tentacle-js = { path = "../tentacle-js", features = ["runtime"] }
