@@ -1,3 +1,7 @@
-//! tentacle-tools — Helix-Tentacle
+//! tentacle-tools — 内置工具集
 //!
-//! T1 骨架：crate 结构已建立，实现在 T2+ 逐步填充。
+//! P2-T1: forager.rs（渐进式觅食评估器）
+//! P2-T2: 已见熵布隆过滤器（修正2）
+//! P3: 完整工具集（targeted_scraper 等）
+
+pub mod forager;

@@ -6,7 +6,7 @@ use crate::error::RegistryError;
 use crate::manifest::{verify_file_integrity, Manifest, ManifestIndex};
 use crate::tool::Tool;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 /// 插件扫描报告（白盒可观测）

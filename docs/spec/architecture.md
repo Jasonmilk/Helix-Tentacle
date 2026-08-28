@@ -51,15 +51,20 @@ plugins/
 pub struct ForagingEvaluator {
     target_tokens: HashSet<String>,
     seen_entropy: HashMap<String, u32>,        // 本次会话已见
-    seen_entropy_bloom: Option<BloomFilter>,   // 全局已见熵（Callosum 导出）
+    seen_entropy_bloom: Option<BloomFilter>,   // 全局已见熵（Callosum 导出，T2 实现）
     threshold_delta: f64,
     pages_fetched: u32,
     max_pages_per_session: u32,
+    zero_gain_streak: u32,                      // 连续零增益次数
+    max_zero_gain_streak: u32,                  // 连续零增益上限（默认 3）
 }
 ```
-- 布隆碰撞 → 增益 0（全局记忆已覆盖）
-- novel_target_tokens / total_target_tokens < threshold → `ForageDecision::Stop`
+- 布隆碰撞 → 增益 0（全局记忆已覆盖，T2 实现）
+- novel_target_tokens / total_target_tokens < threshold → `ForageDecision::Stop(LowInformationGain)`
+- 连续零增益达到上限 → `ForageDecision::Stop(ZeroGainStreak)`（防止在低质量页面上浪费资源）
+- 超过最大页面数 → `ForageDecision::Stop(MaxPagesReached)`
 - 终止不视为错误 → 200 OK + `stop_reason` 元数据 / SSE 正常关闭
+- **分词策略**：英文按非字母数字分割（长度≥2，转小写）；中文用字符级 2-Gram 滑窗（CJK 统一表意文字/平假名/片假名/韩文），不引入重型字典，保持零依赖下的足够鲁棒性
 
 ### 3.4 协程沙箱（T06）
 - JS：固定 worker 池（默认绑定物理核）+ QuickJS 多 context 单线程协程调度

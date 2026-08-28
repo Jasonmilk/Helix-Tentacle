@@ -40,8 +40,7 @@
 
 ### 1.4 入口 ADR
 
-- **ADR-0001**：Tentacle Rust 重构 + 四修正 + 方法论迁移（Active）
-- **ADR-0002**（待创建）：P2 觅食 + 沙箱技术选型（wasmtime vs wasmi，quickjs vs rquickjs，布隆过滤器 crate 选型）
+- **ADR-0001**：Tentacle Rust 重构 + 四修正 + 方法论迁移（Active，已覆盖 P2 技术选型大方向，无需额外 ADR）
 
 ### 1.5 待用户审查的决策点
 

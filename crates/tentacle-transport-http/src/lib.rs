@@ -18,10 +18,9 @@ use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
 use tentacle_core::{
     consensus::{ConsensusHook, NoopConsensus},
-    manifest::Manifest,
     redact::Redactor,
     registry::{ScanReport, ToolRegistry},
-    tool::{ExecutionRequest, Tool, ToolOutput},
+    tool::{ExecutionRequest, Tool},
 };
 use tower_http::cors::CorsLayer;
 
