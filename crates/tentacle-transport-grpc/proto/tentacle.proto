@@ -1,0 +1,116 @@
+syntax = "proto3";
+
+package tentacle.v1;
+
+// Tentacle 工具执行服务
+//
+// 与 HTTP 传输层端点对应：
+// - ListManifests  ↔ GET  /v1/manifest
+// - GetManifest     ↔ GET  /v1/tools/{name}/manifest
+// - ExecuteTool     ↔ POST /v1/tools/{name}/execute
+// - ExecuteToolStream ↔ POST /v1/tools/{name}/execute_stream
+service TentacleService {
+  // 说明书索引（渐进披露：只暴露名称+描述+版本+安全等级）
+  rpc ListManifests(ListManifestsRequest) returns (ListManifestsResponse);
+
+  // 获取完整说明书
+  rpc GetManifest(GetManifestRequest) returns (GetManifestResponse);
+
+  // 执行工具（一次性返回结果）
+  rpc ExecuteTool(ExecuteToolRequest) returns (ExecuteToolResponse);
+
+  // 流式执行工具（SSE 等价，返回结果流）
+  rpc ExecuteToolStream(ExecuteToolRequest) returns (stream ExecuteToolStreamResponse);
+}
+
+// === 请求/响应消息 ===
+
+message ListManifestsRequest {}
+
+message ListManifestsResponse {
+  repeated ManifestIndex manifests = 1;
+}
+
+// 轻量说明书索引（渐进披露）
+message ManifestIndex {
+  string name = 1;
+  string description = 2;
+  string version = 3;
+  string security_level = 4; // normal / elevated / critical
+}
+
+message GetManifestRequest {
+  string name = 1;
+}
+
+message GetManifestResponse {
+  Manifest manifest = 1;
+}
+
+// 完整说明书（与 tentacle-core::Manifest 对应）
+message Manifest {
+  string name = 1;
+  string version = 2;
+  string description = 3;
+  string executable = 4;
+  Integrity integrity = 5;
+  string parameters_schema = 6; // JSON Schema 字符串
+  repeated string tags = 7;
+  string security_level = 8;
+  uint32 timeout_ms = 9;
+  ForagingConfig foraging_config = 10;
+}
+
+message Integrity {
+  string algorithm = 1; // sha256
+  string hash = 2;
+}
+
+message ForagingConfig {
+  bool enabled = 1;
+  double threshold_delta = 2;
+  uint32 max_pages_per_session = 3;
+}
+
+message ExecuteToolRequest {
+  string tool = 1;
+  string params = 2; // JSON 字符串
+  map<string, string> identity_labels = 3; // 凭证标签流转（四修正1）
+  string trace_id = 4;
+  string seen_entropy_bloom = 5; // 已见熵布隆过滤器（四修正2，可选）
+}
+
+message ExecuteToolResponse {
+  bool ok = 1;
+  string data = 2; // JSON 字符串
+  string error = 3;
+  StopReason stop_reason = 4; // 觅食自适应终止（非错误）
+  uint64 duration_ms = 5;
+}
+
+message ExecuteToolStreamResponse {
+  string data = 1; // JSON 字符串（每个 chunk）
+  bool done = 2;
+}
+
+// 停止原因（渐进式觅食）
+message StopReason {
+  oneof reason {
+    LowInformationGain low_information_gain = 1;
+    MaxPagesReached max_pages_reached = 2;
+    ZeroGainStreak zero_gain_streak = 3;
+  }
+}
+
+message LowInformationGain {
+  double last_gain = 1;
+  double threshold = 2;
+}
+
+message MaxPagesReached {
+  uint32 pages = 1;
+}
+
+message ZeroGainStreak {
+  uint32 consecutive_pages = 1;
+}
