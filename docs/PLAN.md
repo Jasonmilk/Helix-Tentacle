@@ -1,7 +1,8 @@
 # Helix-Tentacle 开发导航牌（PLAN）
 
-> **版本**：v1.8（P3-T5 进行中，传输层集成测试，2026-08-29）
-> **状态**：🚧 P3 工具集成（T1✅ WASI 细化，T2✅ worker 池，T3✅ 工具执行引擎，T4✅ targeted_scraper，T5🚧 传输层集成测试）
+> **版本**：v2.0（P3 正式收官，下一阶段预览，2026-08-29）
+> **状态**：✅ P3 工具集成全部完成（T1✅ WASI 细化，T2✅ worker 池，T3✅ 工具执行引擎，T4✅ targeted_scraper，T5✅ 传输层集成测试）
+> **下一阶段**：P4 — 生态对齐 + gRPC/MCP 传输层实现 + CI-144 接入
 > **分支**：rs
 > **所属方法论**：DNA 自生长方法论 v2.0（PLAN 动态流转闭环）
 > **规则**：本文件只含当前阶段 + 下一阶段预览 + 阶段总览地图。完成阶段 → GROWTH.md。总行数 ≤150，超出触发历史迁移。
@@ -20,7 +21,7 @@
 | T2 | worker 池优化：JS 沙箱从"每次独立线程"升级为"固定 worker 池 + 多 context 单线程协程调度" | P2-T4 遗留/白皮书 §6.3 | ✅ 完成（14 tests，0.16s） |
 | T3 | 工具执行引擎集成：Manifest 完整性校验 + 插件目录扫描 + 渐进披露索引与执行层对接（WASM/JS 插件加载执行） | P1-T3 + 白皮书 §3.2 | ✅ 完成（21 tests，WasmTool/JsTool/PluginLoader） |
 | T4 | 首个内置工具 `targeted_scraper`：定向爬取 + 渐进式觅食 + 布隆过滤器端到端验证 | 白皮书 §3.4/附录 A | ✅ 完成（20 tests，HTTP+觅食+HTML解析+凭证标签） |
-| T5 | 传输层集成测试：HTTP/MCP/gRPC 传输层调用工具执行引擎的完整链路测试 | P1-T4 + 白皮书 §3.2 | ⏳ |
+| T5 | 传输层集成测试：HTTP/MCP/gRPC 传输层调用工具执行引擎的完整链路测试 | P1-T4 + 白皮书 §3.2 | ✅ 完成（7 tests，HTTP+WasmTool/JsTool/PluginLoader 端到端） |
 
 ### 1.2 代码真相源（P3 调研结论 + T1 完成状态）
 
@@ -28,7 +29,7 @@
 - **worker 池（T2 ⏳ 待启动）**：P2-T4 已实现 JS 沙箱（rquickjs + 独立线程 + 协变中断），但每次执行创建新线程。白皮书 §6.3 要求"固定 worker 池（默认绑定物理核）+ QuickJS 多 context 单线程协程调度"，需在 P3-T2 升级
 - **工具执行引擎（T3 ✅ 已完成）**：已实现 WasmTool/JsTool（包装沙箱，实现 Tool trait）+ PluginLoader（扫描→校验→加载→注册完整链路）。WasmTool 持有 wasm bytes + 共享 WasmSandbox，执行后将 WasmOutput 转换为 ToolOutput（exit_code/stdout 放在 data 中）。JsTool 持有 js code + 共享 JsSandbox（worker 池）。PluginLoader 根据 Manifest.executable 扩展名（.wasm/.js）选择对应沙箱，加载前双重校验完整性（scan_plugins + load_tool 各一次）。21 tests 全绿
 - **targeted_scraper（T4 ✅ 已完成）**：首个内置工具，实现"HTTP 客户端 + 渐进式觅食 + HTML 解析 + 凭证标签流转"完整链路。使用 IdentityHttpClient（tentacle-http crate，出网强制 X-Identity-Label 头）发送请求，ForagingEvaluator 评估信息增益（边缘价值递减时自动终止，返回 foraging_stopped），regex 去除 HTML 标签（script/style 独立正则避免反向引用），tokio runtime 同步阻塞执行异步 HTTP。布隆过滤器接口已保留（seen_entropy_bloom 字段），完整序列化/反序列化待 Callosum 接口明确后实现。20 tests 全绿（含 extract_text 基础/script/实体、scraper name/manifest/trait object/空 urls 错误/凭证标签）
-- **传输层集成（T5 ⏳）**：P1-T4 已实现 HTTP 传输层（axum 四端点），但 execute 端点未对接真实工具执行引擎。P3-T5 需实现端到端链路
+- **传输层集成（T5 ✅ 已完成）**：7 个端到端集成测试全绿。覆盖 HTTP 传输层 + WasmTool（真实 wasmtime 沙箱，断言 exit_code=42）、HTTP + JsTool（真实 rquickjs 沙箱，断言 value=42）、PluginLoader 完整链路（写 .js + .manifest.json → load_all → 注册 → HTTP POST → 断言 value=hello world）、SSE 流式执行（content-type=text/event-stream，data: 前缀）、凭证标签不泄露（请求携带明文，响应中不包含）、未注册工具返回 404、说明书索引渐进披露（只暴露 name/description/version/security_level）。gRPC/MCP 传输层仍为空壳，后续阶段实现
 
 ### 1.3 四修正状态（全部兑现）
 

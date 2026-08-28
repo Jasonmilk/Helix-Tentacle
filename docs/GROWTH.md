@@ -1,40 +1,10 @@
 # Helix-Tentacle 生长记录
-> **版本**：v1.0
-> **日期**：2026-08-28
+> **版本**：v1.1
+> **日期**：2026-08-29
 > **规则**：仅保留最近 3 条记录，超则归档至 `docs/archive/growth/`
 > **归档策略**：历史随仓库版本化，永不删除
 
-## 记录 1：方法论迁移 + Rust 重构启动（2026-08-28）
-**变异类型**：方法论迁移 + 重构启动
-**背景**：
-- Tentacle `rs` 分支从 `main`（早期 Python 版）创建，需清理重构
-- 用户指令：先完成 DNA 自生长方法论，再基于方法论构建 Rust 版
-- 对齐链：Helix-Tentacle 对齐 Anaphase-Helix，Anaphase-Helix 对齐 Helix-Mind
-**关键决策**：
-1. **清理**：物理移除 `cli/`、`cookies/`（含 `google.txt` 凭证样例）、`domains/`、`tentacle/`、`tests/`、`pyproject.toml`、`README.zh-CN.md`——早期 Python 残留与生态对齐方向相反（明文 cookie 加载 + 本地觅食）
-2. **协议**：MIT → **Apache 2.0**
-3. **main 保留**：main 分支保留 Python 版作为哲学历史参考（历史永不删除，按需加载）
-4. **DNA 五件套**：VISION/DNA/GROWTH/PLAN/decisions/ADR-0001-rust-rebuild 建立（机制复用 DNA v2.0，内容按 Tentacle 哲学独立编写）
-5. **四修正为硬性验收**：凭证标签流转（Tuck）/ 已见熵布隆过滤器（Callosum）/ 异步协程沙箱（ARM）/ 动态共识适配（Standalone/Helix/MCP）
-**状态**：✅ 方法论已建立，Rust 重构待启动
----
-## 记录 2：P1 完成——Rust 核心骨架 + HTTP 传输层（2026-08-28）
-**变异类型**：P1 阶段完成
-**背景**：
-- P1 目标：基于 DNA 方法论构建 Rust 版 Tentacle 核心骨架 + HTTP 传输层
-- 按白皮书 v3.4 crates 结构搭建，四修正为硬性验收
-- 方法论缺口：RNA.md/DEPRECATE.md 缺失，PLAN.md 未升级为导航牌格式
-**关键决策**：
-1. **T1 workspace 骨架**：9 crates（core/http/tools/transport-http/transport-mcp/transport-grpc/wasm/js/tentacle-bin），workspace Cargo.toml 共享配置
-2. **T2 core 类型**：Tool trait/Manifest/ToolRegistry/Redactor/ConsensusHook，无网络依赖。`ExecutionRequest.identity_labels`（无明文 credentials，修正1），`ConsensusMode{Standalone,Helix,Mcp}`（修正4）
-3. **T3 完整性校验**：SHA-256（sha2 crate）+ 插件目录扫描（walkdir）+ ScanReport 白盒可观测 + 渐进披露索引（ManifestIndex 只暴露 name/desc/version/security_level）
-4. **T4 HTTP 传输层**：axum 0.7 四端点（manifest 索引/完整说明书/execute/execute_stream SSE）。Critical 级工具走 ConsensusHook 审批，输出自动脱敏。`IdentityHttpClient` 出网强制 `X-Identity-Label` 头（修正1落地）
-5. **方法论补全**：RNA.md（三层加载 + PLAN 必读 + 凭证红线铁律）、DEPRECATE.md（DEP-001 Python 实现 + DEP-002 明文凭证）、PLAN.md 升级为导航牌格式（参照 Helix-Mind）
-**四修正进度**：修正1✅（凭证标签流转）、修正4✅（动态共识适配）、修正2⏳（布隆过滤器待 P2）、修正3⏳（协程沙箱待 P2）
-**验收**：`cargo test --workspace` → 37 passed, 0 failed, 0 warning
-**状态**：✅ P1 完成，进入 P2（觅食 + 沙箱 + 更多传输层）
----
-## 记录 3：P2 完成——觅食 + 沙箱（四修正全部兑现）（2026-08-29）
+## 记录 1：P2 完成——觅食 + 沙箱（四修正全部兑现）（2026-08-29）
 **变异类型**：P2 阶段完成
 **背景**：
 - P2 目标：渐进式觅食评估器 + 已见熵布隆过滤器 + WASM 沙箱 + JS 协程沙箱
@@ -53,3 +23,29 @@
 - T4: 10 passed (runtime) / 0 warning，协变中断 + 内存限制 + 危险 API 移除验证
 - 全 workspace: 51 passed, 0 failed, 0 warning
 **状态**：✅ P2 完成，四修正全部兑现，进入 P3（工具集成 + WASI 细化 + worker 池优化 + 首个内置工具）
+---
+## 记录 2：P3 完成——工具集成 + WASI 细化 + worker 池 + 首个内置工具 + 传输层集成（2026-08-29）
+**变异类型**：P3 阶段完成
+**背景**：
+- P3 目标：WASI 细化 + worker 池优化 + 工具执行引擎集成 + 首个内置工具 targeted_scraper + 传输层集成测试
+- 按 T1→T2→T3→T4→T5 串行执行，每 T 验证后再进下一个
+- 方法论闭环：ADR 命名规范修正（0001-rust-rebuild.md → ADR-0001-rust-rebuild.md）
+**关键决策**：
+1. **T1 WASI 细化**：接入 wasmtime-wasi v26 preview1。stdout 用 MemoryOutputPipe 捕获到内存（可 clone，执行后 contents() 获取）；文件系统用 preopened_dir 按 manifest.permissions.filesystem 配置（支持 read:/write:/rw: 前缀）；未声明目录无法访问，越权即拒绝
+2. **T2 worker 池**：JS 沙箱从"每次独立线程"升级为"固定 worker 池 + 多 context 单线程协程调度"。worker 数量默认与 CPU 核心数绑定，防止 ARM 端侧过饱和。每个 worker 持有一个 QuickJS Runtime，多 Context 共享 Runtime 但隔离执行
+3. **T3 工具执行引擎**：WasmTool/JsTool（包装沙箱，实现 Tool trait，持有共享沙箱 Arc）+ PluginLoader（扫描→校验→加载→注册完整链路，按扩展名选择沙箱，双重完整性校验）。WasmOutput.exit_code 不判定成功/失败（WASM 返回值不一定是退出码），执行成功总是 ok=true
+4. **T4 targeted_scraper**：首个内置工具，HTTP 客户端（IdentityHttpClient，X-Identity-Label 头）+ 渐进式觅食（ForagingEvaluator）+ HTML 解析（regex，script/style 独立正则避免反向引用）+ 同步阻塞（内部 tokio runtime）。布隆过滤器接口保留，完整序列化待 Callosum 接口明确
+5. **T5 传输层集成测试**：7 个端到端测试全绿。覆盖 HTTP+WasmTool、HTTP+JsTool、PluginLoader 完整链路、SSE 流式、凭证标签不泄露、未注册工具 404、说明书索引渐进披露。gRPC/MCP 传输层仍为空壳，后续阶段实现
+**方法论修正**：
+- ADR 命名规范：RNA.md 决策拦截铁律增加完整命名规范（ADR-<4位编号>-<标题>.md），现有文件重命名为 ADR-0001-rust-rebuild.md
+**验收**：
+- T1: 10 passed (runtime)，WASI stdout 捕获 + 文件系统权限验证
+- T2: 14 passed (runtime)，worker 池 + 多 context 并发验证
+- T3: 21 passed (runtime)，WasmTool/JsTool/PluginLoader 单元测试
+- T4: 20 passed (scraper)，extract_text + scraper 基础测试
+- T5: 7 passed (integration)，端到端传输层集成测试
+- 全 feature 编译：通过（runtime + scraper + bloom）
+**状态**：✅ P3 完成，进入 P4（生态对齐 + gRPC/MCP 传输层实现 + CI-144 接入）
+---
+## 记录 3：预留
+*（按 DNA v2.0 SOP，新记录追加至此，旧记录自动归档）*
