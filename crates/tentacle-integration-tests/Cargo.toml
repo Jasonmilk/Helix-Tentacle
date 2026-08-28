@@ -1,0 +1,22 @@
+[package]
+name = "tentacle-integration-tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+tentacle-core = { path = "../tentacle-core" }
+tentacle-transport-http = { path = "../tentacle-transport-http" }
+tentacle-transport-grpc = { path = "../tentacle-transport-grpc" }
+tentacle-transport-mcp = { path = "../tentacle-transport-mcp" }
+tentacle-tools = { path = "../tentacle-tools", features = ["runtime"] }
+tentacle-wasm = { path = "../tentacle-wasm", features = ["runtime"] }
+tentacle-js = { path = "../tentacle-js", features = ["runtime"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+axum = { version = "0.8", features = ["json"] }
+tonic = "0.12"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+tempfile = "3"

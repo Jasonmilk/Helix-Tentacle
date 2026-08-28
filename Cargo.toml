@@ -10,6 +10,7 @@ members = [
     "crates/tentacle-wasm",
     "crates/tentacle-js",
     "crates/tentacle",
+    "crates/tentacle-integration-tests",
 ]
 
 [workspace.package]
