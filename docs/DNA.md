@@ -1,7 +1,7 @@
 # Helix-Tentacle DNA — 不可变原则与自生长流程
 > **版本**：v1.0
 > **日期**：2026-08-28
-> **继承自**：DNA 自生长方法论 v2.0（机制复用）、Helix-Tentacle VISION.md v1.0（哲学内容源）、工程白皮书 v3.4
+> **继承自**：phyt-DNA v1.0（机制复用，方法论锚点项目 https://github.com/Jasonmilk/phyt-DNA）、Helix-Tentacle VISION.md v1.0（哲学内容源）、工程白皮书 v3.4
 > **性质**：Tentacle 的不可变原则与如何生长。修改 DNA 等于修改身份，旧身份的信用不会转移。
 
 ## 一、不可变原则（10 条公理）

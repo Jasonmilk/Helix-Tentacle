@@ -1,7 +1,7 @@
 # Helix-Tentacle 知识本体 v1.0
 
 > **继承自**：Helix-Tentacle VISION.md v1.0（2026-08-28）、Tentacle 工程白皮书 v3.4
-> **本版本起**：知识本体由 DNA 自生长方法论（v2.0）管理
+> **本版本起**：知识本体由 phyt-DNA v1.0 管理（方法论锚点项目 https://github.com/Jasonmilk/phyt-DNA）
 > **形态变更**：单文件愿景 → 分卷按需加载（`docs/spec/`）
 > **内容连续性**：白皮书 v3.4 拆分/提炼为分卷，无内容丢失
 

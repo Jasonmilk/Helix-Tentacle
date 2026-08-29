@@ -1,7 +1,7 @@
 # Helix-Tentacle 愿景索引
 > **版本**：v1.0
 > **日期**：2026-08-28
-> **继承自**：Tentacle 工程白皮书 v3.4（设计定案）+ DNA 自生长方法论 v2.0
+> **继承自**：Tentacle 工程白皮书 v3.4（设计定案）+ phyt-DNA v1.0（方法论锚点项目 https://github.com/Jasonmilk/phyt-DNA）
 > **性质**：本文件是 Tentacle 的"是什么"与"为什么"。所有架构决策以本文件提炼的原子原则为最终裁判。
 > **对齐链**：Helix-Tentacle 对齐 Anaphase-Helix，Anaphase-Helix 对齐 Helix-Mind。
 
