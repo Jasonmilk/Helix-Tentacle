@@ -22,7 +22,7 @@ pub mod plugin_watcher;
 
 pub use manifest::{
     Manifest, ManifestIndex, Integrity, ForagingConfig, Permission, SecurityLevel,
-    RequiresIdentity,
+    RequiresIdentity, PlatformSupport,
 };
 pub use tool::{Tool, ToolOutput, OutputChunk, ExecutionRequest, StopReason};
 pub use registry::ToolRegistry;

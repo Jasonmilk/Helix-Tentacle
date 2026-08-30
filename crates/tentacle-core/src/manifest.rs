@@ -20,6 +20,56 @@ impl Default for SecurityLevel {
     }
 }
 
+/// 平台支持声明（用于平台感知加载器的白名单过滤）
+///
+/// 与 CI-144 PFP 和 HelixECO-Glove 的 EcoGlove trait 对齐。
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PlatformSupport {
+    /// 目标平台标识（如 "macos"、"linux"、"windows"、"harmony"、"android"、"robot"、"generic"）
+    #[serde(default)]
+    pub platform: String,
+    /// 支持的宿主 OS 列表（用于运行时白名单过滤）
+    ///
+    /// 空列表表示支持所有平台。
+    #[serde(default)]
+    pub host_os: Vec<String>,
+}
+
+impl PlatformSupport {
+    /// 创建通用平台支持（所有平台）
+    pub fn generic() -> Self {
+        Self {
+            platform: "generic".to_string(),
+            host_os: Vec::new(),
+        }
+    }
+
+    /// 创建特定平台支持
+    pub fn new(platform: impl Into<String>, host_os: Vec<String>) -> Self {
+        Self {
+            platform: platform.into(),
+            host_os,
+        }
+    }
+
+    /// 检查是否支持当前平台
+    pub fn is_supported_on_current_platform(&self) -> bool {
+        if self.host_os.is_empty() {
+            return true; // 空列表表示支持所有平台
+        }
+        let current = std::env::consts::OS;
+        self.host_os.iter().any(|os| os == current)
+    }
+
+    /// 检查是否支持指定 OS
+    pub fn supports_os(&self, os: &str) -> bool {
+        if self.host_os.is_empty() {
+            return true;
+        }
+        self.host_os.iter().any(|supported| supported == os)
+    }
+}
+
 /// 完整性校验（声明与执行体的密码学绑定）
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Integrity {
@@ -138,6 +188,9 @@ pub struct Manifest {
     /// 渐进式觅食配置
     #[serde(default)]
     pub foraging_config: ForagingConfig,
+    /// 平台支持声明（用于平台感知加载器的白名单过滤）
+    #[serde(default)]
+    pub platform_support: PlatformSupport,
 }
 
 fn default_timeout() -> u32 { 30000 }
@@ -149,6 +202,10 @@ pub struct ManifestIndex {
     pub description: String,
     pub version: String,
     pub security_level: SecurityLevel,
+    /// 平台标识（用于 CLI 显示和平台过滤）
+    pub platform: String,
+    /// 是否在当前平台可用
+    pub available_on_current_platform: bool,
 }
 
 impl From<&Manifest> for ManifestIndex {
@@ -158,6 +215,8 @@ impl From<&Manifest> for ManifestIndex {
             description: m.description.clone(),
             version: m.version.clone(),
             security_level: m.security_level,
+            platform: m.platform_support.platform.clone(),
+            available_on_current_platform: m.platform_support.is_supported_on_current_platform(),
         }
     }
 }

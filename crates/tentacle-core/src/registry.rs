@@ -88,6 +88,67 @@ impl ToolRegistry {
         self.manifests.values().map(ManifestIndex::from).collect()
     }
 
+    /// 获取当前平台支持的轻量说明书索引（平台感知过滤）
+    ///
+    /// 只返回 `platform_support.host_os` 包含当前 OS，或 `host_os` 为空（通用工具）的工具。
+    pub fn index_for_current_platform(&self) -> Vec<ManifestIndex> {
+        let current = std::env::consts::OS;
+        self.manifests
+            .values()
+            .filter(|m| {
+                m.platform_support.host_os.is_empty()
+                    || m.platform_support.host_os.iter().any(|os| os == current)
+            })
+            .map(ManifestIndex::from)
+            .collect()
+    }
+
+    /// 获取指定 OS 支持的轻量说明书索引（平台感知过滤）
+    pub fn index_for_os(&self, os: &str) -> Vec<ManifestIndex> {
+        self.manifests
+            .values()
+            .filter(|m| {
+                m.platform_support.host_os.is_empty()
+                    || m.platform_support.host_os.iter().any(|host_os| host_os == os)
+            })
+            .map(ManifestIndex::from)
+            .collect()
+    }
+
+    /// 检查指定工具是否在当前平台可用
+    pub fn is_supported_on_current_platform(&self, name: &str) -> bool {
+        self.manifests
+            .get(name)
+            .map(|m| m.platform_support.is_supported_on_current_platform())
+            .unwrap_or(false)
+    }
+
+    /// 获取当前平台支持的工具名称列表
+    pub fn supported_tool_names(&self) -> Vec<String> {
+        let current = std::env::consts::OS;
+        self.manifests
+            .values()
+            .filter(|m| {
+                m.platform_support.host_os.is_empty()
+                    || m.platform_support.host_os.iter().any(|os| os == current)
+            })
+            .map(|m| m.name.clone())
+            .collect()
+    }
+
+    /// 获取当前平台不支持的工具名称列表（用于 CLI 显示"不可用"标签）
+    pub fn unsupported_tool_names(&self) -> Vec<String> {
+        let current = std::env::consts::OS;
+        self.manifests
+            .values()
+            .filter(|m| {
+                !m.platform_support.host_os.is_empty()
+                    && !m.platform_support.host_os.iter().any(|os| os == current)
+            })
+            .map(|m| m.name.clone())
+            .collect()
+    }
+
     /// 获取工具的完整 Manifest
     pub fn get_manifest(&self, name: &str) -> Option<&Manifest> {
         self.manifests.get(name)
