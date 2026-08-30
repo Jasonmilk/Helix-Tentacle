@@ -21,16 +21,16 @@
 | T1 | 性能基准测试：criterion + HTTP/gRPC/MCP 三传输层延迟/吞吐/并发对比 | 白皮书 §性能 / 生产就绪 | ✅ |
 | T2 | 资源限制：ResourceLimiter trait + 内存/CPU/FD/超时/输出五维配额 + WASM/JS沙箱集成 | 白皮书 §6.3 沙箱安全 | ✅ |
 | T3 | 可观测性：MetricsCollector trait + InMemoryMetrics + HTTP /metrics端点 + 工具执行指标自动记录 | 白皮书 §白盒可观测 | ✅ |
-| T4 | 生产部署文档：Docker/K8s/systemd，配置最佳实践 | 生产就绪 | ⏳ |
-| T5 | STDIO 传输层实现：零配置本地使用（echo JSON → 执行 → 输出结果） | 白皮书 §3.2 STDIO 模式 | ⏳ |
+| T4 | 生产部署文档：Docker/K8s/systemd，配置最佳实践 | 生产就绪 | 📦 调整到 P6 |
+| T5 | STDIO 传输层实现：零配置本地使用（echo JSON → 执行 → 输出结果） | 白皮书 §3.2 STDIO 模式 | ⏳ P5 收尾项 |
 
 ### 1.2 代码真相源（P5 T1-T3 完成，T4-T5 待启动）
 
 - **性能基准（T1 ✅）**：`crates/tentacle-benchmarks/`，criterion 框架，覆盖核心层/HTTP/gRPC/MCP。详见 GROWTH.md 记录 3
 - **资源限制（T2 ✅）**：`crates/tentacle-core/src/resource.rs`，ResourceLimiter trait + 五维配额 + WASM/JS集成。详见 GROWTH.md 记录 3
 - **可观测性（T3 ✅）**：`crates/tentacle-core/src/metrics.rs`，MetricsCollector trait + InMemoryMetrics + HTTP /metrics端点。详见 GROWTH.md 记录 3
-- **部署文档（T4 ⏳）**：待编写 Dockerfile/K8s/systemd + 配置最佳实践
-- **STDIO 传输层（T5 ⏳）**：`crates/tentacle/` 二进制入口待实现，echo JSON → 执行 → 输出结果
+- **部署文档（T4 📦 调整到 P6）**：Dockerfile/K8s manifest/systemd service + 配置最佳实践，在 P6 生态联调阶段完成
+- **STDIO 传输层（T5 ⏳ P5 收尾项）**：`crates/tentacle/` 二进制入口待实现，echo JSON → 执行 → 输出结果，零配置本地使用
 
 ### 1.3 四修正状态（全部兑现，P5 持续维护）
 
@@ -63,8 +63,8 @@
 | T1 | 性能基准测试（criterion + 三传输层对比） | ✅ 完成 | - |
 | T2 | 资源限制（ResourceLimiter trait + 五维配额 + WASM/JS集成） | ✅ 完成 | 14 |
 | T3 | 可观测性（MetricsCollector + /metrics端点 + 自动指标记录） | ✅ 完成 | 12 |
-| T4 | 生产部署文档（Docker/K8s/systemd） | ⏳ 待启动 | - |
-| T5 | STDIO 传输层实现 | ⏳ 待启动 | - |
+| T4 | 生产部署文档（Docker/K8s/systemd） | 📦 调整到 P6 | - |
+| T5 | STDIO 传输层实现（P5 收尾项） | ⏳ 待启动 | - |
 
 ### 1.7 验收标准
 
@@ -75,12 +75,13 @@
 - T5：STDIO 模式可用（echo JSON → 执行 → 输出结果），零配置本地使用
 - `cargo test --workspace` 全绿 + 0 warning
 
-### 1.8 下一阶段预览：P6 — 生态全组件联调 + CI-144 v2.0 接入
+### 1.8 下一阶段预览：P6 — 生态全组件联调 + CI-144 v2.0 接入 + 生产部署
 
 - 与 Helix 生态全组件端到端联调（Mind + Anaphase + Tuck + Cellrix + Callosum）
 - CI-144 v2.0（PFP-xCF14 + SAP-xCF14）接入：4 字节固定偏移 PFP 头部，Modality/Risk-Level/Override-Flag
 - Tuck 重构对接：凭证标签流转完整闭环（Tentacle → Tuck → 公网）
 - Cellrix 观测对接：工具执行状态实时展示
+- **生产部署文档（P5-T4 调整项）**：Dockerfile + K8s manifest + systemd service + 配置最佳实践
 - 生产环境灰度发布
 
 ---
@@ -94,7 +95,7 @@
 | P2 | 觅食 + 沙箱（修正2/3 落地，T1-T4） | ✅ 2026-08-29（51 tests，四修正全部兑现） |
 | P3 | 工具集成 + WASI 细化 + worker 池 + 首个内置工具 | ✅ 2026-08-29（72 tests，P3 收官） |
 | P4 | 生态对齐 + gRPC/MCP 传输层 + 插件热插拔 | ✅ 2026-08-29（76+ tests，P4 收官） |
-| **P5** | **性能优化 + 生产就绪（基准测试/资源限制/可观测性/部署文档/STDIO）** | **🚧 T1-T3 完成，T4 待启动（96 tests）** |
+| **P5** | **性能优化 + 生产就绪（基准测试/资源限制/可观测性/STDIO入口）** | **🚧 T1-T3 完成，T5 待启动（T4 调整到 P6，153 tests）** |
 | P6 | 生态全组件联调 + CI-144 v2.0 接入 | ⏳ 预览 |
 
 ---
@@ -116,6 +117,8 @@
 | 性能基准 | P5-T1（tentacle-benchmarks crate + criterion） |
 | 资源限制 | P5-T2（ResourceLimiter trait + 五维配额 + WASM/JS集成） |
 | 可观测性 | P5-T3（MetricsCollector trait + InMemoryMetrics + HTTP /metrics端点） |
+| 部署文档 | P5-T4 调整到 P6（Docker/K8s/systemd + 配置最佳实践） |
+| STDIO 传输层 | P5-T5（P5 收尾项，echo JSON → 执行 → 输出结果，零配置本地使用） |
 | 生态对齐 | Anaphase-Helix gRPC 契约 + Helix-Mind 认知工艺 + Callosum 布隆导出 |
 | Tuck 边界 | 明文凭证永不在 Tentacle 内存，Tuck 物理边缘注入 |
 | CI-144 v2.0 | PFP-xCF14 + SAP-xCF14 已冻结，P6 接入（不阻塞 P5） |

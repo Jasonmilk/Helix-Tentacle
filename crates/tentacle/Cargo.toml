@@ -9,3 +9,9 @@ name = "tentacle"
 path = "src/main.rs"
 
 [dependencies]
+tentacle-core = { path = "../tentacle-core" }
+tentacle-transport-http = { path = "../tentacle-transport-http" }
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
