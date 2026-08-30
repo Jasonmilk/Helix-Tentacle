@@ -1,8 +1,8 @@
 # Helix-Tentacle — 通用战术武器系统（Rust 版）
 
-> **rs 分支** ｜ **Apache 2.0** ｜ **DNA 自生长方法论 v2.0 治理**
+> **rs 分支** ｜ **Apache 2.0** ｜ **phyt-DNA 方法论 v1.0 治理**
 > **性质**：独立的、自带说明书的、多传输层的通用工具执行引擎（无状态纯净版）
-> **当前阶段**：P4 ✅ 完成（生态对齐 + gRPC/MCP 传输层 + 插件热插拔），P5 🚧 预览中（性能优化 + 生产就绪）
+> **当前阶段**：P5 ✅ 完成（性能优化 + 资源限制 + 可观测性 + STDIO 传输层），P6 ⏳ 预览中（生态全组件联调 + CI-144 v2.0 接入 + 生产部署）
 
 ## 定位
 
@@ -20,7 +20,7 @@ Tentacle 是一把"刀"——独立、可组合、自带说明书（Manifest）�
 
 | 分支 | 内容 | 状态 |
 |---|---|---|
-| **`rs`**（当前） | Rust 重构版，DNA 方法论治理 | **P4 完成，P5 预览中**（76+ tests） |
+| **`rs`**（当前） | Rust 重构版，phyt-DNA 方法论治理 | **P5 完成，P6 预览中**（153 tests） |
 | **`main`** | 早期 Python 版 | **保留为哲学历史参考**（历史永不删除，按需加载） |
 
 ## 阶段总览
@@ -32,7 +32,8 @@ Tentacle 是一把"刀"——独立、可组合、自带说明书（Manifest）�
 | P2 | 觅食 + 沙箱（四修正全部兑现） | ✅ 2026-08-29 | 51 tests |
 | P3 | 工具集成 + WASI 细化 + worker 池 + 首个内置工具 | ✅ 2026-08-29 | 72 tests |
 | **P4** | **生态对齐 + gRPC/MCP 传输层 + 插件热插拔** | **✅ 2026-08-29** | **76+ tests** |
-| P5 | 性能优化 + 生产就绪 | 🚧 预览中 | - |
+| **P5** | **性能优化 + 资源限制 + 可观测性 + STDIO 传输层** | **✅ 2026-08-30** | **153 tests** |
+| P6 | 生态全组件联调 + CI-144 v2.0 接入 + 生产部署 | ⏳ 预览中 | - |
 
 ## 传输层支持
 
@@ -41,7 +42,7 @@ Tentacle 是一把"刀"——独立、可组合、自带说明书（Manifest）�
 | **HTTP/REST + SSE** | ✅ 完成 | `GET /v1/manifest`、`GET /v1/tools/{name}/manifest`、`POST /v1/tools/{name}/execute`、`POST /v1/tools/{name}/execute_stream` | 任何 HTTP 客户端、远程部署、云服务 |
 | **gRPC** | ✅ 完成 | `ListManifests`、`GetManifest`、`ExecuteTool`、`ExecuteStream` | Anaphase-Helix 内部生态、高性能二进制通信 |
 | **MCP** | ✅ 完成 | `tools/list`、`tools/call`（JSON-RPC 2.0 over stdio/HTTP/SSE） | Claude Desktop、Codex 等 MCP 客户端 |
-| **STDIO** | ⏳ P5 | 零配置本地使用 | 调试、脚本集成、极简部署 |
+| **STDIO** | ✅ 完成 | 零配置本地使用（`echo '{"tool":"...","params":{}}' \| tentacle`） | 调试、脚本集成、极简部署、MCP 兼容 |
 
 ## 核心能力
 
@@ -56,6 +57,9 @@ Tentacle 是一把"刀"——独立、可组合、自带说明书（Manifest）�
 | 插件热插拔 | ✅ | 可选 `hot-reload` feature（默认不启用），文件系统监听，索引实时更新 |
 | 动态共识适配 | ✅ | Standalone 终端确认 / Helix CAP / MCP 回调三模式 |
 | 全传输层集成测试 | ✅ | 11 个端到端测试，HTTP/gRPC/MCP 跨传输层一致性验证 |
+| 性能基准测试 | ✅ | criterion 框架，核心层/HTTP/gRPC/MCP 三传输层延迟/吞吐/并发基准 |
+| 统一资源限制 | ✅ | ResourceLimiter trait，五维配额（内存/CPU/FD/超时/输出），WASM/JS 沙箱集成 |
+| 可观测性 | ✅ | MetricsCollector trait + InMemoryMetrics，Prometheus /metrics 端点，工具执行自动指标记录 |
 
 ## 生态对齐链
 
@@ -66,7 +70,7 @@ Helix-Mind ← Anaphase-Helix ← Helix-Tentacle
 
 Tentacle 对齐 Anaphase（gRPC 契约 + 凭证标签流转 + 共识 Helix 模式），Anaphase 对齐 Mind（已完成）。对齐链是重构的硬约束。
 
-**CI-144 v2.0（PAL）**：审查通过、等待冻结，不阻塞当前阶段，冻结后自然接入生态手套路由。
+**CI-144 v2.0（PFP-xCF14 + SAP-xCF14）**：已冻结，P6 接入（4 字节固定偏移 PFP 头部，Modality/Risk-Level/Override-Flag）。
 
 ## 四修正硬性验收（生态对齐）
 
@@ -89,8 +93,21 @@ cargo test --workspace
 # 运行全传输层集成测试
 cargo test -p tentacle-integration-tests
 
+# 运行性能基准测试
+cargo bench --package tentacle-benchmarks
+
 # 构建（按需启用 feature）
 cargo build --release --features runtime,scraper,bloom
+
+# STDIO 模式（零配置本地使用）
+echo '{"tool":"mock","params":{"input":"test"}}' | ./target/release/tentacle
+
+# HTTP 模式
+./target/release/tentacle --transport http --port 3000
+# 端点: GET /v1/manifest, GET /metrics, POST /v1/tools/{name}/execute
+
+# 指定插件目录
+./target/release/tentacle --transport stdio --plugins-dir ./plugins
 ```
 
 ## 文档导航
@@ -110,7 +127,7 @@ cargo build --release --features runtime,scraper,bloom
 
 ## 方法论治理
 
-本项目遵循 **DNA 自生长方法论 v2.0**：
+本项目遵循 **phyt-DNA 方法论 v1.0**（方法论锚点项目：https://github.com/Jasonmilk/phyt-DNA）：
 
 - **N 层（叙事）**：VISION.md + SPEC.md + spec/ 分卷
 - **D 层（决策）**：ADR 系列（Draft/Active 两态，Active 后不可覆写）

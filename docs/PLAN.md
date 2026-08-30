@@ -1,7 +1,7 @@
 # Helix-Tentacle 开发导航牌（PLAN）
 
-> **版本**：v4.1（P5 T1-T3 完成，T4 待启动，2026-08-30）
-> **状态**：🚧 P5 性能优化 + 生产就绪（T1-T3 ✅，T4 ⏳）
+> **版本**：v4.2（P5 完成，2026-08-30）
+> **状态**：✅ P5 性能优化 + 生产就绪（T1-T3 + T5 全部完成，T4 调整到 P6）
 > **上一阶段**：P4 ✅ 生态对齐 + gRPC/MCP 传输层 + 插件热插拔（2026-08-29，76+ tests）
 > **分支**：rs
 > **所属方法论**：phyt-DNA v1.0（PLAN 动态流转闭环，方法论锚点项目 https://github.com/Jasonmilk/phyt-DNA）
@@ -9,9 +9,9 @@
 
 ---
 
-## 1. 当前阶段：P5 — 性能优化 + 生产就绪
+## 1. 当前阶段：P5 — 性能优化 + 生产就绪 ✅
 
-> **状态**：🚧 T1-T3 完成，T4 待启动（部署文档）。
+> **状态**：✅ 完成（T1-T3 + T5 全部完成，T4 调整到 P6）。
 > **前置依赖**：CI-144 v2.0 已冻结（PFP-xCF14 + SAP-xCF14），Tuck 重构已完成，P5 可独立推进。
 
 ### 1.1 目标（基于白皮书 v3.4 + 生产就绪需求）
@@ -22,7 +22,7 @@
 | T2 | 资源限制：ResourceLimiter trait + 内存/CPU/FD/超时/输出五维配额 + WASM/JS沙箱集成 | 白皮书 §6.3 沙箱安全 | ✅ |
 | T3 | 可观测性：MetricsCollector trait + InMemoryMetrics + HTTP /metrics端点 + 工具执行指标自动记录 | 白皮书 §白盒可观测 | ✅ |
 | T4 | 生产部署文档：Docker/K8s/systemd，配置最佳实践 | 生产就绪 | 📦 调整到 P6 |
-| T5 | STDIO 传输层实现：零配置本地使用（echo JSON → 执行 → 输出结果） | 白皮书 §3.2 STDIO 模式 | ⏳ P5 收尾项 |
+| T5 | STDIO 传输层实现：零配置本地使用（echo JSON → 执行 → 输出结果） | 白皮书 §3.2 STDIO 模式 | ✅ |
 
 ### 1.2 代码真相源（P5 T1-T3 完成，T4-T5 待启动）
 
@@ -30,7 +30,7 @@
 - **资源限制（T2 ✅）**：`crates/tentacle-core/src/resource.rs`，ResourceLimiter trait + 五维配额 + WASM/JS集成。详见 GROWTH.md 记录 3
 - **可观测性（T3 ✅）**：`crates/tentacle-core/src/metrics.rs`，MetricsCollector trait + InMemoryMetrics + HTTP /metrics端点。详见 GROWTH.md 记录 3
 - **部署文档（T4 📦 调整到 P6）**：Dockerfile/K8s manifest/systemd service + 配置最佳实践，在 P6 生态联调阶段完成
-- **STDIO 传输层（T5 ⏳ P5 收尾项）**：`crates/tentacle/` 二进制入口待实现，echo JSON → 执行 → 输出结果，零配置本地使用
+- **STDIO 传输层（T5 ✅）**：`crates/tentacle/src/main.rs`，支持 stdio/http 双模式，clap 命令行参数，STDIO 逐行读取 JSON 执行输出，HTTP 复用 axum router，日志输出到 stderr。详见 GROWTH.md 记录 3
 
 ### 1.3 四修正状态（全部兑现，P5 持续维护）
 
@@ -64,18 +64,18 @@
 | T2 | 资源限制（ResourceLimiter trait + 五维配额 + WASM/JS集成） | ✅ 完成 | 14 |
 | T3 | 可观测性（MetricsCollector + /metrics端点 + 自动指标记录） | ✅ 完成 | 12 |
 | T4 | 生产部署文档（Docker/K8s/systemd） | 📦 调整到 P6 | - |
-| T5 | STDIO 传输层实现（P5 收尾项） | ⏳ 待启动 | - |
+| T5 | STDIO 传输层实现（P5 收尾项） | ✅ 完成 | - |
 
 ### 1.7 验收标准
 
 - T1：✅ 性能基准测试框架建立，HTTP/gRPC/MCP 三传输层延迟/吞吐/并发基准可复现
 - T2：✅ ResourceLimiter trait 建立，五维配额可配置，WASM/JS 沙箱集成，越权即拒绝
 - T3：✅ Prometheus metrics 端点可用（/metrics），工具执行自动记录成功/失败计数器和耗时直方图
-- T4：Dockerfile + K8s manifest + systemd service 可用，配置最佳实践文档完整
-- T5：STDIO 模式可用（echo JSON → 执行 → 输出结果），零配置本地使用
+- T4：📦 调整到 P6（部署文档在生态联调阶段完成）
+- T5：✅ STDIO 模式可用（echo JSON → 执行 → 输出结果），零配置本地使用，支持 stdio/http 双模式
 - `cargo test --workspace` 全绿 + 0 warning
 
-### 1.8 下一阶段预览：P6 — 生态全组件联调 + CI-144 v2.0 接入 + 生产部署
+### 1.8 下一阶段：P6 — 生态全组件联调 + CI-144 v2.0 接入 + 生产部署
 
 - 与 Helix 生态全组件端到端联调（Mind + Anaphase + Tuck + Cellrix + Callosum）
 - CI-144 v2.0（PFP-xCF14 + SAP-xCF14）接入：4 字节固定偏移 PFP 头部，Modality/Risk-Level/Override-Flag
@@ -95,8 +95,8 @@
 | P2 | 觅食 + 沙箱（修正2/3 落地，T1-T4） | ✅ 2026-08-29（51 tests，四修正全部兑现） |
 | P3 | 工具集成 + WASI 细化 + worker 池 + 首个内置工具 | ✅ 2026-08-29（72 tests，P3 收官） |
 | P4 | 生态对齐 + gRPC/MCP 传输层 + 插件热插拔 | ✅ 2026-08-29（76+ tests，P4 收官） |
-| **P5** | **性能优化 + 生产就绪（基准测试/资源限制/可观测性/STDIO入口）** | **🚧 T1-T3 完成，T5 待启动（T4 调整到 P6，153 tests）** |
-| P6 | 生态全组件联调 + CI-144 v2.0 接入 | ⏳ 预览 |
+| **P5** | **性能优化 + 生产就绪（基准测试/资源限制/可观测性/STDIO入口）** | **✅ 2026-08-30（T1-T3+T5 完成，T4 调整到 P6，153 tests）** |
+| P6 | 生态全组件联调 + CI-144 v2.0 接入 + 生产部署文档 | ⏳ 下一阶段 |
 
 ---
 
