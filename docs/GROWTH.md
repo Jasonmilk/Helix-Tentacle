@@ -1,6 +1,6 @@
 # Helix-Tentacle 生长记录
-> **版本**：v1.2
-> **日期**：2026-08-29
+> **版本**：v1.3
+> **日期**：2026-08-30
 > **规则**：仅保留最近 3 条记录，超则归档至 `docs/archive/growth/`
 > **归档策略**：历史随仓库版本化，永不删除
 
@@ -53,5 +53,26 @@
 - P4 合计：76+ tests
 **状态**：✅ P4 完成，进入 P5（性能优化 + 生产就绪）
 ---
-## 记录 3：预留
-*（按 DNA v2.0 SOP，新记录追加至此，旧记录自动归档）*
+## 记录 3：P5 阶段性进展——T1 性能基准 + T2 资源限制 + T3 可观测性（2026-08-30）
+**变异类型**：P5 阶段 T1-T3 完成（T4-T5 待启动，阶段性记录）
+**背景**：
+- P5 目标：性能基准测试 + 资源限制 + 可观测性 + 部署文档 + STDIO 传输层
+- 按 T1→T2→T3→T4→T5 串行执行，每 T 验证后再进下一个
+- 方法论闭环：PLAN.md 实时更新状态，GROWTH.md 记录阶段性生长，提交信息持续关联 ADR-0001
+**关键决策**：
+1. **T1 性能基准框架**：选择 criterion（Rust 生态主流，支持异步基准 + 统计分析）。新建 `crates/tentacle-benchmarks/` crate（publish=false），覆盖核心层基线（direct execute + registry lookup）、HTTP 传输层（single + 10/50/100 并发）、gRPC 传输层（single）、MCP 传输层（tools_call + tools_list）。MockTool 用 SecurityLevel::Normal 避免共识审批阻塞基准测试。运行方式：`cargo bench --package tentacle-benchmarks`
+2. **T2 统一资源限制**：建立 ResourceLimiter trait（极致解耦，与具体沙箱实现分离）。五维配额：内存/CPU时间/文件描述符/超时/输出大小。四种预设：default（50MB+5s+64FD+10s+1MB）、lightweight（16MB+1s+16FD+3s+256KB）、heavyweight（256MB+30s+256FD+60s+10MB）、unlimited（无限制）。AtomicResourceLimiter 用原子计数器实现，线程安全，内存峰值用 compare_exchange_weak 无锁更新。WASM 沙箱新增 `execute_with_quota()` + 输出大小检查；JS 沙箱新增 `execute_with_quota()` + worker 内存限制取 quota.memory_limit_bytes。向后兼容：`execute()` 接口不变
+3. **T3 可观测性**：轻量 InMemoryMetrics（不依赖外部 metrics crate，按需加载，无运行时开销）。MetricsCollector trait 支持 Counter/Gauge/Histogram 三种指标类型，Prometheus 文本格式导出（含 HELP/TYPE 注释）。13 个标准指标常量：工具执行（executions_total/executions_failed_total/execution_duration_seconds）、工具状态（tools_active/tools_registered）、沙箱资源（memory_used_bytes/memory_peak_bytes/cpu_time_used_ms/fd_used）、传输层（requests_total/requests_failed_total/request_duration_seconds）。ToolExecutionMetrics 是 RAII 风格记录器，自动记录开始时间，`record_success()`/`record_failure()` 自动记录计数器和耗时直方图。record_resource_usage() 是 ResourceLimiter→Metrics 桥接函数。HTTP 传输层 AppState 新增 metrics 字段 + GET /metrics 端点（Content-Type: text/plain; version=0.0.4）+ execute_tool 自动记录成功/失败指标
+**方法论闭环**：
+- PLAN.md 实时更新（P5 进度表 T1-T3 标记 ✅，T4-T5 标记 ⏳，决策点 D1-D5 全部确认）
+- GROWTH.md 追加 P5 阶段性记录（本记录）
+- 提交信息持续关联 ADR（`(ADR-0001 §P5-Tx)`）
+- RNA.md v1.3 方法论完整生效（PLAN 导航牌 + GROWTH 生长记录 + RNA 加载协议三层闭环）
+**验收**：
+- T1: tentacle-benchmarks crate 建立，criterion 框架集成，6 组基准测试（core_execute/core_registry/http_execute/http_concurrency/grpc_execute/mcp_protocol）
+- T2: 14 passed (resource)，ResourceQuota/ResourceUsage/ResourceLimiter/AtomicResourceLimiter 单元测试
+- T3: 12 passed (metrics)，Counter/Gauge/Histogram/导出格式/RAII记录器/资源桥接 单元测试
+- P5 T1-T3 合计：26 新增测试，全 workspace 96 tests
+- `cargo check --workspace` 全绿（含 runtime feature）
+**状态**：🚧 P5 T1-T3 完成，T4（部署文档）待启动，T5（STDIO 传输层）待启动
+---

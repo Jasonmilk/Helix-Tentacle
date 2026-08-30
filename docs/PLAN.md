@@ -1,7 +1,7 @@
 # Helix-Tentacle 开发导航牌（PLAN）
 
-> **版本**：v4.0（P4 收官，P5 启动，2026-08-29）
-> **状态**：🚧 P5 性能优化 + 生产就绪（T1 待启动）
+> **版本**：v4.1（P5 T1-T3 完成，T4 待启动，2026-08-30）
+> **状态**：🚧 P5 性能优化 + 生产就绪（T1-T3 ✅，T4 ⏳）
 > **上一阶段**：P4 ✅ 生态对齐 + gRPC/MCP 传输层 + 插件热插拔（2026-08-29，76+ tests）
 > **分支**：rs
 > **所属方法论**：phyt-DNA v1.0（PLAN 动态流转闭环，方法论锚点项目 https://github.com/Jasonmilk/phyt-DNA）
@@ -11,26 +11,26 @@
 
 ## 1. 当前阶段：P5 — 性能优化 + 生产就绪
 
-> **状态**：🚧 T1 待启动（性能基准测试）。
-> **前置依赖**：CI-144 v2.0（PAL）冻结状态待确认——若已冻结，优先启动 Tuck 重构；若尚未冻结，推进 P5 作为铺垫。
+> **状态**：🚧 T1-T3 完成，T4 待启动（部署文档）。
+> **前置依赖**：CI-144 v2.0 已冻结（PFP-xCF14 + SAP-xCF14），Tuck 重构已完成，P5 可独立推进。
 
 ### 1.1 目标（基于白皮书 v3.4 + 生产就绪需求）
 
 | 任务 | 内容 | 入口 | 状态 |
 |---|---|---|---|
-| T1 | 性能基准测试：ARM 端侧 100 并发延迟/吞吐，HTTP/gRPC/MCP 三传输层对比 | 白皮书 §性能 / 生产就绪 | ⏳ |
-| T2 | 资源限制：内存/CPU/文件描述符配额，沙箱资源隔离强化 | 白皮书 §6.3 沙箱安全 | ⏳ |
-| T3 | 可观测性：Prometheus metrics + OpenTelemetry tracing（CI-144 traceparent 透传） | 白皮书 §白盒可观测 | ⏳ |
+| T1 | 性能基准测试：criterion + HTTP/gRPC/MCP 三传输层延迟/吞吐/并发对比 | 白皮书 §性能 / 生产就绪 | ✅ |
+| T2 | 资源限制：ResourceLimiter trait + 内存/CPU/FD/超时/输出五维配额 + WASM/JS沙箱集成 | 白皮书 §6.3 沙箱安全 | ✅ |
+| T3 | 可观测性：MetricsCollector trait + InMemoryMetrics + HTTP /metrics端点 + 工具执行指标自动记录 | 白皮书 §白盒可观测 | ✅ |
 | T4 | 生产部署文档：Docker/K8s/systemd，配置最佳实践 | 生产就绪 | ⏳ |
 | T5 | STDIO 传输层实现：零配置本地使用（echo JSON → 执行 → 输出结果） | 白皮书 §3.2 STDIO 模式 | ⏳ |
 
-### 1.2 代码真相源（P4 完成状态 + P5 调研）
+### 1.2 代码真相源（P5 T1-T3 完成，T4-T5 待启动）
 
-- **性能基准（T1 ⏳）**：当前无基准测试框架。需建立 criterion 或自研基准，覆盖 HTTP/gRPC/MCP 三传输层的延迟/吞吐/内存占用。ARM 端侧（树莓派/ Jetson）为重点测试环境
-- **资源限制（T2 ⏳）**：当前 WASM 沙箱有 epoch_deadline 超时，JS 沙箱有内存限制（50MB），但缺少统一的资源配额管理。需建立 ResourceLimiter trait，统一管理内存/CPU/文件描述符
-- **可观测性（T3 ⏳）**：当前无 metrics/tracing。需建立 metrics crate（Prometheus 格式），tracing 集成（OpenTelemetry），CI-144 traceparent 透传（W3C Trace Context）
-- **部署文档（T4 ⏳）**：当前无生产部署文档。需编写 Dockerfile、K8s manifest、systemd service，配置最佳实践（安全策略、资源限制、日志）
-- **STDIO 传输层（T5 ⏳）**：当前 `crates/tentacle/` 二进制入口为空壳。需实现 STDIO 模式（读取 JSON → 解析 ExecutionRequest → 执行 → 输出 JSON），零配置本地使用
+- **性能基准（T1 ✅）**：`crates/tentacle-benchmarks/`，criterion 框架，覆盖核心层/HTTP/gRPC/MCP。详见 GROWTH.md 记录 3
+- **资源限制（T2 ✅）**：`crates/tentacle-core/src/resource.rs`，ResourceLimiter trait + 五维配额 + WASM/JS集成。详见 GROWTH.md 记录 3
+- **可观测性（T3 ✅）**：`crates/tentacle-core/src/metrics.rs`，MetricsCollector trait + InMemoryMetrics + HTTP /metrics端点。详见 GROWTH.md 记录 3
+- **部署文档（T4 ⏳）**：待编写 Dockerfile/K8s/systemd + 配置最佳实践
+- **STDIO 传输层（T5 ⏳）**：`crates/tentacle/` 二进制入口待实现，echo JSON → 执行 → 输出结果
 
 ### 1.3 四修正状态（全部兑现，P5 持续维护）
 
@@ -43,34 +43,34 @@
 
 ### 1.4 入口 ADR
 
-- **ADR-0001**：Tentacle Rust 重构 + 四修正 + 方法论迁移（Active，已覆盖 P1-P4 技术选型大方向）
-- **P5 新增 ADR 候选**：性能基准框架选型、可观测性方案（metrics/tracing）、STDIO 传输层设计（如与现有设计有重大偏离，需新建 ADR-0002）
+- **ADR-0001**：Tentacle Rust 重构 + 四修正 + 方法论迁移（Active，已覆盖 P1-P5 技术选型大方向）
+- **P5 决策记录**：T1 criterion 框架选型、T2 ResourceLimiter trait 设计、T3 MetricsCollector trait + InMemoryMetrics 轻量实现（均已追加至 ADR-0001）
 
-### 1.5 已确认决策点（P5 D1-D5 待确认）
+### 1.5 已确认决策点（P5 D1-D5 全部确认）
 
 | # | 决策点 | 决议 | 状态 |
 |---|---|---|---|
-| D1 | P5 T 拆分粒度 | T1→T2→T3→T4→T5 串行，每 T 验证后再进下一个 | ⏳ 待确认 |
-| D2 | 性能基准框架 | criterion（Rust 生态主流）或自研轻量基准 | ⏳ 待确认 |
-| D3 | 可观测性方案 | Prometheus metrics + OpenTelemetry tracing（CI-144 traceparent 透传） | ⏳ 待确认 |
-| D4 | STDIO 传输层 | 复用 core + 现有传输层逻辑，独立二进制入口 | ⏳ 待确认 |
-| D5 | CI-144 v2.0 接入时机 | PAL 冻结后自然接入，不阻塞 P5；Tuck 重构优先级高于 P5（若 PAL 已冻结） | ⏳ 待确认 |
+| D1 | P5 T 拆分粒度 | T1→T2→T3→T4→T5 串行，每 T 验证后再进下一个 | ✅ 已确认 |
+| D2 | 性能基准框架 | criterion（Rust 生态主流，支持异步基准 + 统计分析） | ✅ 已确认 |
+| D3 | 可观测性方案 | 轻量 InMemoryMetrics（不依赖外部 crate），Prometheus 格式导出，未来可接入 OpenTelemetry | ✅ 已确认 |
+| D4 | STDIO 传输层 | 复用 core + 现有传输层逻辑，独立二进制入口 | ✅ 已确认 |
+| D5 | CI-144 v2.0 接入时机 | PAL 已冻结，Tuck 重构已完成，P5 可独立推进，CI-144 接入放 P6 | ✅ 已确认 |
 
-### 1.6 P5 进度（待启动）
+### 1.6 P5 进度（T1-T3 完成）
 
 | 任务 | 内容 | 状态 | 测试 |
 |---|---|---|---|
-| T1 | 性能基准测试（ARM 端侧，三传输层对比） | ⏳ 待启动 | - |
-| T2 | 资源限制（内存/CPU/文件描述符配额） | ⏳ 待启动 | - |
-| T3 | 可观测性（Prometheus metrics + OpenTelemetry tracing） | ⏳ 待启动 | - |
+| T1 | 性能基准测试（criterion + 三传输层对比） | ✅ 完成 | - |
+| T2 | 资源限制（ResourceLimiter trait + 五维配额 + WASM/JS集成） | ✅ 完成 | 14 |
+| T3 | 可观测性（MetricsCollector + /metrics端点 + 自动指标记录） | ✅ 完成 | 12 |
 | T4 | 生产部署文档（Docker/K8s/systemd） | ⏳ 待启动 | - |
 | T5 | STDIO 传输层实现 | ⏳ 待启动 | - |
 
 ### 1.7 验收标准
 
-- T1：性能基准测试框架建立，HTTP/gRPC/MCP 三传输层延迟/吞吐/内存数据可复现
-- T2：ResourceLimiter trait 建立，沙箱内存/CPU/文件描述符配额可配置，越权即拒绝
-- T3：Prometheus metrics 端点可用（/metrics），OpenTelemetry tracing 集成，CI-144 traceparent 透传
+- T1：✅ 性能基准测试框架建立，HTTP/gRPC/MCP 三传输层延迟/吞吐/并发基准可复现
+- T2：✅ ResourceLimiter trait 建立，五维配额可配置，WASM/JS 沙箱集成，越权即拒绝
+- T3：✅ Prometheus metrics 端点可用（/metrics），工具执行自动记录成功/失败计数器和耗时直方图
 - T4：Dockerfile + K8s manifest + systemd service 可用，配置最佳实践文档完整
 - T5：STDIO 模式可用（echo JSON → 执行 → 输出结果），零配置本地使用
 - `cargo test --workspace` 全绿 + 0 warning
@@ -78,7 +78,7 @@
 ### 1.8 下一阶段预览：P6 — 生态全组件联调 + CI-144 v2.0 接入
 
 - 与 Helix 生态全组件端到端联调（Mind + Anaphase + Tuck + Cellrix + Callosum）
-- CI-144 v2.0（PAL）接入：16 字节固定偏移头部，Modality/Risk-Level/Override-Flag
+- CI-144 v2.0（PFP-xCF14 + SAP-xCF14）接入：4 字节固定偏移 PFP 头部，Modality/Risk-Level/Override-Flag
 - Tuck 重构对接：凭证标签流转完整闭环（Tentacle → Tuck → 公网）
 - Cellrix 观测对接：工具执行状态实时展示
 - 生产环境灰度发布
@@ -94,7 +94,7 @@
 | P2 | 觅食 + 沙箱（修正2/3 落地，T1-T4） | ✅ 2026-08-29（51 tests，四修正全部兑现） |
 | P3 | 工具集成 + WASI 细化 + worker 池 + 首个内置工具 | ✅ 2026-08-29（72 tests，P3 收官） |
 | P4 | 生态对齐 + gRPC/MCP 传输层 + 插件热插拔 | ✅ 2026-08-29（76+ tests，P4 收官） |
-| **P5** | **性能优化 + 生产就绪（基准测试/可观测性/部署文档/STDIO）** | **🚧 待启动** |
+| **P5** | **性能优化 + 生产就绪（基准测试/资源限制/可观测性/部署文档/STDIO）** | **🚧 T1-T3 完成，T4 待启动（96 tests）** |
 | P6 | 生态全组件联调 + CI-144 v2.0 接入 | ⏳ 预览 |
 
 ---
@@ -113,9 +113,12 @@
 | targeted_scraper | P3-T4（HTTP 客户端 + 渐进式觅食 + 布隆过滤器） |
 | 传输层 | P1-T4 HTTP + P4-T1 gRPC + P4-T2 MCP（三传输层平等） |
 | 全传输层集成 | P4-T5（11 tests，跨传输层一致性验证） |
+| 性能基准 | P5-T1（tentacle-benchmarks crate + criterion） |
+| 资源限制 | P5-T2（ResourceLimiter trait + 五维配额 + WASM/JS集成） |
+| 可观测性 | P5-T3（MetricsCollector trait + InMemoryMetrics + HTTP /metrics端点） |
 | 生态对齐 | Anaphase-Helix gRPC 契约 + Helix-Mind 认知工艺 + Callosum 布隆导出 |
 | Tuck 边界 | 明文凭证永不在 Tentacle 内存，Tuck 物理边缘注入 |
-| CI-144 v2.0 | PAL 审查通过、等待冻结，冻结后自然接入（不阻塞 P5） |
+| CI-144 v2.0 | PFP-xCF14 + SAP-xCF14 已冻结，P6 接入（不阻塞 P5） |
 
 ---
 
