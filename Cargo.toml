@@ -11,6 +11,7 @@ members = [
     "crates/tentacle-js",
     "crates/tentacle",
     "crates/tentacle-integration-tests",
+    "crates/tentacle-benchmarks",
 ]
 
 [workspace.package]

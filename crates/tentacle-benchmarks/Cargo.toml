@@ -1,0 +1,27 @@
+[package]
+name = "tentacle-benchmarks"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bench]]
+name = "transport_benchmarks"
+harness = false
+
+[dependencies]
+tentacle-core = { path = "../tentacle-core" }
+tentacle-transport-http = { path = "../tentacle-transport-http" }
+tentacle-transport-mcp = { path = "../tentacle-transport-mcp" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+axum = "0.7"
+reqwest = { version = "0.12", features = ["json"] }
+tower = "0.5"
+tower-http = { version = "0.5", features = ["cors"] }
+criterion = { version = "0.5", features = ["async_tokio"] }
+async-trait = "0.1"
+rand = "0.8"
+
+[dev-dependencies]
+tempfile = "3"
