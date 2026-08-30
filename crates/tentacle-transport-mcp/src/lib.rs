@@ -766,6 +766,8 @@ mod tests {
             description: "test tool".into(),
             version: "1.0".into(),
             security_level: SecurityLevel::Normal,
+            platform: "test".into(),
+            available_on_current_platform: true,
         };
         let tool = manifest_to_mcp_tool(&index, None);
         assert_eq!(tool["name"], "test");
