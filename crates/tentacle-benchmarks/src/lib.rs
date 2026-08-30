@@ -46,6 +46,7 @@ impl MockTool {
             rate_limit_per_minute: None,
             timeout_ms: 5000,
             foraging_config: Default::default(),
+            platform_support: Default::default(),
         };
         Self {
             name: name.to_string(),

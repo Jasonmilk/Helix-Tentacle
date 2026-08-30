@@ -80,6 +80,29 @@ async fn main() {
 
     info!("已注册工具数: {}", registry.len());
 
+    // 为每个已注册的 Manifest 实例化 ProcessTool（执行外部命令/脚本）
+    // 这是懒加载的临时实现，生产环境应使用专门的 PluginLoader
+    if let Some(ref dir) = args.plugins_dir {
+        let manifests: Vec<tentacle_core::Manifest> = registry
+            .index()
+            .iter()
+            .filter_map(|idx| registry.get_manifest(&idx.name).cloned())
+            .collect();
+
+        for manifest in manifests {
+            let executable_path = std::path::Path::new(dir).join(&manifest.executable);
+            if executable_path.exists() {
+                let tool = ProcessTool::new(manifest, executable_path);
+                if let Err(e) = registry.register_tool(std::sync::Arc::new(tool)) {
+                    warn!("工具注册失败: {}", e);
+                }
+            } else {
+                warn!("执行体不存在: {} (工具: {})", executable_path.display(), manifest.name);
+            }
+        }
+        info!("已实例化工具数: {}", registry.len());
+    }
+
     // 根据传输模式启动
     match args.transport.as_str() {
         "stdio" => run_stdio(registry),
@@ -218,5 +241,74 @@ async fn run_http(registry: ToolRegistry, port: u16) {
     if let Err(e) = axum::serve(listener, app).await {
         error!("HTTP 服务器错误: {}", e);
         std::process::exit(1);
+    }
+}
+
+/// ProcessTool — 通过外部进程执行工具（临时实现，用于联调验证）
+///
+/// 生产环境应使用专门的 PluginLoader（支持 WASM/JS 沙箱、资源限制等）。
+/// 这个实现直接通过 std::process::Command 执行 executable 脚本。
+struct ProcessTool {
+    manifest: tentacle_core::Manifest,
+    executable_path: std::path::PathBuf,
+}
+
+impl ProcessTool {
+    fn new(manifest: tentacle_core::Manifest, executable_path: std::path::PathBuf) -> Self {
+        Self { manifest, executable_path }
+    }
+}
+
+impl tentacle_core::Tool for ProcessTool {
+    fn name(&self) -> &str {
+        &self.manifest.name
+    }
+
+    fn manifest(&self) -> &tentacle_core::Manifest {
+        &self.manifest
+    }
+
+    fn execute(&self, req: tentacle_core::ExecutionRequest) -> Result<tentacle_core::ToolOutput, tentacle_core::ToolError> {
+        use std::process::Command;
+
+        // 根据 executable 扩展名选择执行方式
+        let output = if self.executable_path.extension().and_then(|e| e.to_str()) == Some("js") {
+            // JS 文件用 node 执行
+            Command::new("node")
+                .arg(&self.executable_path)
+                .arg(&req.tool)
+                .arg(serde_json::to_string(&req.params).unwrap_or_default())
+                .arg("{}") // server_config 占位
+                .output()
+        } else {
+            // 其他文件直接执行
+            Command::new(&self.executable_path)
+                .arg(&req.tool)
+                .arg(serde_json::to_string(&req.params).unwrap_or_default())
+                .output()
+        };
+
+        match output {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+                if output.status.success() {
+                    // 尝试解析 stdout 为 JSON
+                    let data = serde_json::from_str(&stdout).unwrap_or(serde_json::json!({ "raw_output": stdout }));
+                    Ok(tentacle_core::ToolOutput::success(data))
+                } else {
+                    Err(tentacle_core::ToolError::ExecutionFailed(format!(
+                        "执行失败 (exit code: {:?}): {}",
+                        output.status.code(),
+                        stderr
+                    )))
+                }
+            }
+            Err(e) => Err(tentacle_core::ToolError::ExecutionFailed(format!(
+                "无法启动进程: {}",
+                e
+            ))),
+        }
     }
 }
