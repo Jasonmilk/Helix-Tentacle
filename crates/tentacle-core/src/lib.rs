@@ -14,6 +14,7 @@ pub mod redact;
 pub mod consensus;
 pub mod error;
 pub mod resource;
+pub mod metrics;
 
 /// 插件热插拔监听器（可选 feature: hot-reload）
 #[cfg(feature = "hot-reload")]
@@ -30,4 +31,8 @@ pub use consensus::{ConsensusHook, ConsensusMode, Approval, ConsensusError};
 pub use error::{ToolError, RegistryError};
 pub use resource::{
     ResourceQuota, ResourceUsage, ResourceLimiter, ResourceLimitError, AtomicResourceLimiter,
+};
+pub use metrics::{
+    MetricType, MetricValue, Metric, MetricsCollector, InMemoryMetrics,
+    register_standard_metrics, record_resource_usage, ToolExecutionMetrics,
 };

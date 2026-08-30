@@ -18,6 +18,7 @@ use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
 use tentacle_core::{
     consensus::{ConsensusHook, NoopConsensus},
+    metrics::{InMemoryMetrics, MetricsCollector},
     redact::Redactor,
     registry::{ScanReport, ToolRegistry},
     tool::{ExecutionRequest, Tool},
@@ -30,14 +31,19 @@ pub struct AppState {
     pub registry: Arc<Mutex<ToolRegistry>>,
     pub redactor: Arc<Redactor>,
     pub consensus: Arc<dyn ConsensusHook>,
+    /// 指标收集器（P5-T3：可观测性）
+    pub metrics: Arc<InMemoryMetrics>,
 }
 
 impl AppState {
     pub fn new(registry: ToolRegistry) -> Self {
+        let metrics = Arc::new(InMemoryMetrics::new());
+        tentacle_core::metrics::register_standard_metrics(metrics.as_ref());
         Self {
             registry: Arc::new(Mutex::new(registry)),
             redactor: Arc::new(Redactor::default()),
             consensus: Arc::new(NoopConsensus),
+            metrics,
         }
     }
 
@@ -64,8 +70,19 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/tools/:name/manifest", get(get_manifest))
         .route("/v1/tools/:name/execute", post(execute_tool))
         .route("/v1/tools/:name/execute_stream", post(execute_stream))
+        .route("/metrics", get(metrics_endpoint))
         .layer(CorsLayer::permissive())
         .with_state(state)
+}
+
+/// GET /metrics — Prometheus 格式指标端点（P5-T3：可观测性）
+async fn metrics_endpoint(State(state): State<AppState>) -> impl IntoResponse {
+    let prom = state.metrics.export_prometheus();
+    (
+        StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4")],
+        prom,
+    )
 }
 
 /// GET /v1/manifest — 说明书索引（渐进披露，只暴露名称+描述+版本+安全等级）
@@ -134,6 +151,10 @@ async fn execute_tool(
 
     drop(registry);
 
+    // 指标记录（P5-T3：可观测性）
+    let exec_metrics = tentacle_core::metrics::ToolExecutionMetrics::new(state.metrics.as_ref(), &name)
+        .with_label("transport", "http");
+
     // 执行工具
     match tool.execute(req) {
         Ok(mut output) => {
@@ -141,12 +162,16 @@ async fn execute_tool(
             if let Some(ref mut data) = output.data {
                 state.redactor.redact(data);
             }
+            exec_metrics.record_success();
             Json(output).into_response()
         }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": e.to_string()})),
-        ).into_response(),
+        Err(e) => {
+            exec_metrics.record_failure(&e.to_string());
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            ).into_response()
+        }
     }
 }
 
