@@ -62,6 +62,8 @@ pub enum WasmError {
     MissingEntry,
     #[error("WASI 预打开目录失败: {0}")]
     PreopenDir(String),
+    #[error("资源限制触发: {0}")]
+    ResourceLimit(String),
 }
 
 /// 解析 Manifest filesystem 权限配置
@@ -125,6 +127,8 @@ pub struct WasmSandbox {
     epoch_handle: Option<JoinHandle<()>>,
     /// 停止 epoch 线程的标志
     stop_flag: Arc<AtomicBool>,
+    /// 默认资源配额（P5-T2：统一资源限制）
+    default_quota: tentacle_core::ResourceQuota,
 }
 
 impl WasmSandbox {
@@ -133,6 +137,11 @@ impl WasmSandbox {
     /// 启动后台 epoch 递增线程（每 10ms 递增一次），
     /// 用于 epoch_deadline 超时机制。
     pub fn new() -> Result<Self, WasmError> {
+        Self::with_quota(tentacle_core::ResourceQuota::default())
+    }
+
+    /// 创建带自定义资源配额的 WASM 沙箱（P5-T2）
+    pub fn with_quota(quota: tentacle_core::ResourceQuota) -> Result<Self, WasmError> {
         #[cfg(feature = "runtime")]
         {
             let mut config = wasmtime::Config::new();
@@ -155,6 +164,7 @@ impl WasmSandbox {
                 engine,
                 epoch_handle: Some(epoch_handle),
                 stop_flag,
+                default_quota: quota,
             })
         }
 
@@ -163,6 +173,7 @@ impl WasmSandbox {
             Ok(Self {
                 epoch_handle: None,
                 stop_flag: Arc::new(AtomicBool::new(false)),
+                default_quota: quota,
             })
         }
     }
@@ -194,8 +205,29 @@ impl WasmSandbox {
         manifest: &Manifest,
         timeout_ms: u64,
     ) -> Result<WasmOutput, WasmError> {
+        // 使用默认配额，超时时间由参数覆盖
+        let mut quota = self.default_quota.clone();
+        if timeout_ms > 0 {
+            quota.timeout_ms = timeout_ms;
+        }
+        self.execute_with_quota(wasm_bytes, manifest, &quota)
+    }
+
+    /// 执行 WASM 模块（带自定义资源配额，P5-T2）
+    pub fn execute_with_quota(
+        &self,
+        wasm_bytes: &[u8],
+        manifest: &Manifest,
+        quota: &tentacle_core::ResourceQuota,
+    ) -> Result<WasmOutput, WasmError> {
         #[cfg(feature = "runtime")]
         {
+            use tentacle_core::{AtomicResourceLimiter, ResourceLimiter};
+
+            // 启动资源限制器
+            let limiter = AtomicResourceLimiter::new(quota.clone());
+            limiter.start();
+
             // 1. 编译模块（支持 WAT 文本自动检测）
             let module = Module::new(&self.engine, wasm_bytes)
                 .map_err(|e| WasmError::Compile(e.to_string()))?;
@@ -227,7 +259,13 @@ impl WasmSandbox {
             let mut store = Store::new(&self.engine, wasi);
 
             // 5. 设置 epoch_deadline（每 10ms 一个 epoch）
-            let epoch_ticks = (timeout_ms / EPOCH_INTERVAL_MS).max(1);
+            //    超时时间取 quota.timeout_ms 和原参数的较小值
+            let effective_timeout = if quota.timeout_ms > 0 {
+                quota.timeout_ms
+            } else {
+                u64::MAX
+            };
+            let epoch_ticks = (effective_timeout / EPOCH_INTERVAL_MS).max(1);
             store.set_epoch_deadline(epoch_ticks);
 
             // 6. 创建 Linker，添加 WASI preview1 函数
@@ -257,7 +295,18 @@ impl WasmSandbox {
 
             // 9. 提取 stdout 内容（通过 clone 的 MemoryOutputPipe 引用）
             let stdout_bytes = stdout_handle.contents();
+            let stdout_len = stdout_bytes.len();
+
+            // 10. 检查输出大小限制（P5-T2）
+            limiter.record_output(stdout_len);
+            if let Err(e) = limiter.check_output(stdout_len) {
+                return Err(WasmError::ResourceLimit(e.to_string()));
+            }
+
             let stdout = String::from_utf8_lossy(&stdout_bytes).to_string();
+
+            // 11. 停止资源限制器，记录最终使用量
+            let _usage = limiter.stop();
 
             Ok(WasmOutput {
                 exit_code: result,
@@ -267,7 +316,7 @@ impl WasmSandbox {
 
         #[cfg(not(feature = "runtime"))]
         {
-            let _ = (wasm_bytes, manifest, timeout_ms);
+            let _ = (wasm_bytes, manifest, quota);
             Err(WasmError::Compile(
                 "runtime feature 未启用，请使用 --features runtime 编译".to_string(),
             ))

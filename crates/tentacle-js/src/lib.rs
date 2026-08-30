@@ -59,6 +59,8 @@ pub enum JsError {
     MemoryLimit,
     #[error("JS worker 线程已停止")]
     WorkerStopped,
+    #[error("资源限制触发: {0}")]
+    ResourceLimit(String),
 }
 
 /// 发送给 worker 的任务
@@ -100,6 +102,8 @@ pub struct JsSandbox {
     memory_limit: usize,
     /// worker 池大小
     worker_count: usize,
+    /// 默认资源配额（P5-T2：统一资源限制）
+    default_quota: tentacle_core::ResourceQuota,
 }
 
 impl JsSandbox {
@@ -111,7 +115,136 @@ impl JsSandbox {
         let worker_count = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(2);
-        Self::with_workers(memory_limit, worker_count)
+        let mut quota = tentacle_core::ResourceQuota::default();
+        quota.memory_limit_bytes = memory_limit;
+        Self::with_quota(quota, worker_count)
+    }
+
+    /// 创建带自定义资源配额的 JS 沙箱（P5-T2）
+    #[cfg(feature = "runtime")]
+    pub fn with_quota(quota: tentacle_core::ResourceQuota, worker_count: usize) -> Self {
+        {
+            let worker_count = worker_count.max(1);
+            let mut workers = Vec::with_capacity(worker_count);
+            let mem_limit = quota.memory_limit_bytes;
+
+            for _ in 0..worker_count {
+                let (task_tx, task_rx) = mpsc::channel::<JsTask>();
+
+                let thread_handle = thread::spawn(move || {
+                    // worker 线程：创建 Runtime + Context（可复用）
+                    let runtime = match Runtime::new() {
+                        Ok(rt) => rt,
+                        Err(_) => return, // Runtime 创建失败，worker 线程退出
+                    };
+
+                    if mem_limit > 0 {
+                        runtime.set_memory_limit(mem_limit);
+                    }
+
+                    let context = match Context::full(&runtime) {
+                        Ok(ctx) => ctx,
+                        Err(_) => return, // Context 创建失败，worker 线程退出
+                    };
+
+                    // 循环接收任务
+                    while let Ok(task) = task_rx.recv() {
+                        // 重置取消信号
+                        task.cancel.store(false, Ordering::Relaxed);
+    
+                        // 更新中断处理器（绑定当前任务的取消信号）
+                        let cancel_handler = task.cancel.clone();
+                        runtime.set_interrupt_handler(Some(Box::new(move || {
+                            cancel_handler.load(Ordering::Relaxed)
+                        })));
+    
+                        // 启动超时定时器线程（分段 sleep + done 标志，任务完成后快速退出）
+                        let cancel_timeout = task.cancel.clone();
+                        let done = Arc::new(AtomicBool::new(false));
+                        let done_timeout = done.clone();
+                        let timeout_ms = task.timeout_ms;
+                        let timeout_handle = thread::spawn(move || {
+                            // 分 10ms 小段 sleep，检查 done 标志
+                            let total_ms = timeout_ms;
+                            let step_ms = 10u64;
+                            let mut elapsed_ms = 0u64;
+                            while elapsed_ms < total_ms && !done_timeout.load(Ordering::Relaxed) {
+                                thread::sleep(Duration::from_millis(step_ms));
+                                elapsed_ms += step_ms;
+                            }
+                            // 只有任务未完成时才设置取消信号
+                            if !done_timeout.load(Ordering::Relaxed) {
+                                cancel_timeout.store(true, Ordering::Relaxed);
+                            }
+                        });
+    
+                        // 执行 JS 代码（在闭包内直接通过 result_tx 发送结果）
+                        let cancel = task.cancel.clone();
+                        let result_tx = task.result_tx.clone();
+                        context.with(|ctx| {
+                            match ctx.eval::<rquickjs::Value, _>(task.code.as_str()) {
+                                Ok(value) => {
+                                    let string = if let Some(s) = value.as_string() {
+                                        s.to_string().unwrap_or_default()
+                                    } else if let Some(b) = value.as_bool() {
+                                        b.to_string()
+                                    } else if let Some(i) = value.as_int() {
+                                        i.to_string()
+                                    } else if let Some(f) = value.as_float() {
+                                        if f.fract() == 0.0 && f.abs() < 1e15 {
+                                            format!("{}", f as i64)
+                                        } else {
+                                            f.to_string()
+                                        }
+                                    } else if value.is_null() {
+                                        "null".to_string()
+                                    } else if value.is_undefined() {
+                                        "undefined".to_string()
+                                    } else {
+                                        "[object Object]".to_string()
+                                    };
+                                    let _ = result_tx.send(Ok(JsOutput { value: string }));
+                                }
+                                Err(e) => {
+                                    let err_msg = e.to_string();
+                                    if cancel.load(Ordering::Relaxed) {
+                                        let _ = result_tx.send(Err(JsError::Timeout));
+                                    } else if err_msg.contains("memory")
+                                        || err_msg.contains("Memory")
+                                        || err_msg.contains("out of memory")
+                                    {
+                                        let _ = result_tx.send(Err(JsError::MemoryLimit));
+                                    } else {
+                                        let _ = result_tx.send(Err(JsError::Execute(err_msg)));
+                                    }
+                                }
+                            }
+                        });
+    
+                        // JS 执行完毕，设置 done 标志（让超时定时器线程快速退出）
+                        done.store(true, Ordering::Relaxed);
+    
+                        // 等待超时定时器结束（最多等待 10ms，避免线程泄漏）
+                        let _ = timeout_handle.join();
+                    }
+    
+                    // task_rx 断开（JsSandbox 被 drop），worker 线程退出
+                });
+
+                workers.push(WorkerHandle {
+                    task_tx,
+                    _thread_handle: thread_handle,
+                });
+            }
+
+            Self {
+                workers,
+                next_worker: AtomicUsize::new(0),
+                memory_limit: quota.memory_limit_bytes,
+                worker_count,
+                default_quota: quota,
+            }
+        }
     }
 
     /// 创建 JS 沙箱（指定 worker 池大小）
@@ -121,133 +254,30 @@ impl JsSandbox {
     /// - `worker_count`: worker 池大小（线程数），至少 1
     #[cfg(feature = "runtime")]
     pub fn with_workers(memory_limit: usize, worker_count: usize) -> Self {
-        let worker_count = worker_count.max(1);
-        let mut workers = Vec::with_capacity(worker_count);
-
-        for _ in 0..worker_count {
-            let (task_tx, task_rx) = mpsc::channel::<JsTask>();
-            let mem_limit = memory_limit;
-
-            let thread_handle = thread::spawn(move || {
-                // worker 线程：创建 Runtime + Context（可复用）
-                let runtime = match Runtime::new() {
-                    Ok(rt) => rt,
-                    Err(_) => return, // Runtime 创建失败，worker 线程退出
-                };
-
-                if mem_limit > 0 {
-                    runtime.set_memory_limit(mem_limit);
-                }
-
-                let context = match Context::full(&runtime) {
-                    Ok(ctx) => ctx,
-                    Err(_) => return, // Context 创建失败，worker 线程退出
-                };
-
-                // 循环接收任务
-                while let Ok(task) = task_rx.recv() {
-                    // 重置取消信号
-                    task.cancel.store(false, Ordering::Relaxed);
-
-                    // 更新中断处理器（绑定当前任务的取消信号）
-                    let cancel_handler = task.cancel.clone();
-                    runtime.set_interrupt_handler(Some(Box::new(move || {
-                        cancel_handler.load(Ordering::Relaxed)
-                    })));
-
-                    // 启动超时定时器线程（分段 sleep + done 标志，任务完成后快速退出）
-                    let cancel_timeout = task.cancel.clone();
-                    let done = Arc::new(AtomicBool::new(false));
-                    let done_timeout = done.clone();
-                    let timeout_ms = task.timeout_ms;
-                    let timeout_handle = thread::spawn(move || {
-                        // 分 10ms 小段 sleep，检查 done 标志
-                        let total_ms = timeout_ms;
-                        let step_ms = 10u64;
-                        let mut elapsed_ms = 0u64;
-                        while elapsed_ms < total_ms && !done_timeout.load(Ordering::Relaxed) {
-                            thread::sleep(Duration::from_millis(step_ms));
-                            elapsed_ms += step_ms;
-                        }
-                        // 只有任务未完成时才设置取消信号
-                        if !done_timeout.load(Ordering::Relaxed) {
-                            cancel_timeout.store(true, Ordering::Relaxed);
-                        }
-                    });
-
-                    // 执行 JS 代码（在闭包内直接通过 result_tx 发送结果）
-                    let cancel = task.cancel.clone();
-                    let result_tx = task.result_tx.clone();
-                    context.with(|ctx| {
-                        match ctx.eval::<rquickjs::Value, _>(task.code.as_str()) {
-                            Ok(value) => {
-                                let string = if let Some(s) = value.as_string() {
-                                    s.to_string().unwrap_or_default()
-                                } else if let Some(b) = value.as_bool() {
-                                    b.to_string()
-                                } else if let Some(i) = value.as_int() {
-                                    i.to_string()
-                                } else if let Some(f) = value.as_float() {
-                                    if f.fract() == 0.0 && f.abs() < 1e15 {
-                                        format!("{}", f as i64)
-                                    } else {
-                                        f.to_string()
-                                    }
-                                } else if value.is_null() {
-                                    "null".to_string()
-                                } else if value.is_undefined() {
-                                    "undefined".to_string()
-                                } else {
-                                    "[object Object]".to_string()
-                                };
-                                let _ = result_tx.send(Ok(JsOutput { value: string }));
-                            }
-                            Err(e) => {
-                                let err_msg = e.to_string();
-                                if cancel.load(Ordering::Relaxed) {
-                                    let _ = result_tx.send(Err(JsError::Timeout));
-                                } else if err_msg.contains("memory")
-                                    || err_msg.contains("Memory")
-                                    || err_msg.contains("out of memory")
-                                {
-                                    let _ = result_tx.send(Err(JsError::MemoryLimit));
-                                } else {
-                                    let _ = result_tx.send(Err(JsError::Execute(err_msg)));
-                                }
-                            }
-                        }
-                    });
-
-                    // JS 执行完毕，设置 done 标志（让超时定时器线程快速退出）
-                    done.store(true, Ordering::Relaxed);
-
-                    // 等待超时定时器结束（最多等待 10ms，避免线程泄漏）
-                    let _ = timeout_handle.join();
-                }
-
-                // task_rx 断开（JsSandbox 被 drop），worker 线程退出
-            });
-
-            workers.push(WorkerHandle {
-                task_tx,
-                _thread_handle: thread_handle,
-            });
-        }
-
-        Self {
-            workers,
-            next_worker: AtomicUsize::new(0),
-            memory_limit,
-            worker_count,
-        }
+        let mut quota = tentacle_core::ResourceQuota::default();
+        quota.memory_limit_bytes = memory_limit;
+        Self::with_quota(quota, worker_count)
     }
 
     /// 创建 JS 沙箱（指定 worker 池大小，无 runtime feature 时的占位实现）
     #[cfg(not(feature = "runtime"))]
     pub fn with_workers(memory_limit: usize, worker_count: usize) -> Self {
+        let mut quota = tentacle_core::ResourceQuota::default();
+        quota.memory_limit_bytes = memory_limit;
         Self {
             memory_limit,
             worker_count: worker_count.max(1),
+            default_quota: quota,
+        }
+    }
+
+    /// 创建带自定义资源配额的 JS 沙箱（无 runtime feature 时的占位实现，P5-T2）
+    #[cfg(not(feature = "runtime"))]
+    pub fn with_quota(quota: tentacle_core::ResourceQuota, worker_count: usize) -> Self {
+        Self {
+            memory_limit: quota.memory_limit_bytes,
+            worker_count: worker_count.max(1),
+            default_quota: quota,
         }
     }
 
@@ -275,8 +305,29 @@ impl JsSandbox {
         _manifest: &Manifest,
         timeout_ms: u64,
     ) -> Result<JsOutput, JsError> {
+        // 使用默认配额，超时时间由参数覆盖
+        let mut quota = self.default_quota.clone();
+        if timeout_ms > 0 {
+            quota.timeout_ms = timeout_ms;
+        }
+        self.execute_with_quota(js_code, _manifest, &quota)
+    }
+
+    /// 执行 JS 代码（带自定义资源配额，P5-T2）
+    pub fn execute_with_quota(
+        &self,
+        js_code: &str,
+        _manifest: &Manifest,
+        quota: &tentacle_core::ResourceQuota,
+    ) -> Result<JsOutput, JsError> {
         #[cfg(feature = "runtime")]
         {
+            use tentacle_core::{AtomicResourceLimiter, ResourceLimiter};
+
+            // 启动资源限制器
+            let limiter = AtomicResourceLimiter::new(quota.clone());
+            limiter.start();
+
             // round-robin 选择 worker
             let worker_idx = self.next_worker.fetch_add(1, Ordering::Relaxed) % self.workers.len();
             let worker = &self.workers[worker_idx];
@@ -284,9 +335,14 @@ impl JsSandbox {
             // 创建任务
             let (result_tx, result_rx) = mpsc::channel::<Result<JsOutput, JsError>>();
             let cancel = Arc::new(AtomicBool::new(false));
+            let effective_timeout = if quota.timeout_ms > 0 {
+                quota.timeout_ms
+            } else {
+                u64::MAX
+            };
             let task = JsTask {
                 code: js_code.to_string(),
-                timeout_ms,
+                timeout_ms: effective_timeout,
                 result_tx,
                 cancel: cancel.clone(),
             };
@@ -295,19 +351,33 @@ impl JsSandbox {
             worker.task_tx.send(task).map_err(|_| JsError::WorkerStopped)?;
 
             // 等待结果（兜底超时 = timeout_ms + 1s）
-            match result_rx.recv_timeout(Duration::from_millis(timeout_ms + 1000)) {
+            let result = match result_rx.recv_timeout(Duration::from_millis(effective_timeout + 1000)) {
                 Ok(result) => result,
                 Err(_) => {
                     // 兜底超时：设置取消信号，返回 Timeout
                     cancel.store(true, Ordering::Relaxed);
                     Err(JsError::Timeout)
                 }
+            };
+
+            // 检查输出大小限制（P5-T2）
+            if let Ok(ref output) = result {
+                let output_len = output.value.len();
+                limiter.record_output(output_len);
+                if let Err(e) = limiter.check_output(output_len) {
+                    return Err(JsError::ResourceLimit(e.to_string()));
+                }
             }
+
+            // 停止资源限制器
+            let _usage = limiter.stop();
+
+            result
         }
 
         #[cfg(not(feature = "runtime"))]
         {
-            let _ = (js_code, _manifest, timeout_ms);
+            let _ = (js_code, _manifest, quota);
             Err(JsError::Runtime(
                 "runtime feature 未启用，请使用 --features runtime 编译".to_string(),
             ))

@@ -13,6 +13,7 @@ pub mod registry;
 pub mod redact;
 pub mod consensus;
 pub mod error;
+pub mod resource;
 
 /// 插件热插拔监听器（可选 feature: hot-reload）
 #[cfg(feature = "hot-reload")]
@@ -27,3 +28,6 @@ pub use registry::ToolRegistry;
 pub use redact::Redactor;
 pub use consensus::{ConsensusHook, ConsensusMode, Approval, ConsensusError};
 pub use error::{ToolError, RegistryError};
+pub use resource::{
+    ResourceQuota, ResourceUsage, ResourceLimiter, ResourceLimitError, AtomicResourceLimiter,
+};
