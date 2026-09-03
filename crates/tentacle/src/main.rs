@@ -5,6 +5,7 @@
 //! 用法：
 //! - STDIO 模式（默认）：`echo '{"tool":"mock","params":{}}' | tentacle`
 //! - HTTP 模式：`tentacle --transport http --port 3000`
+//! - gRPC 模式：`tentacle --transport grpc --grpc-port 50051`
 //! - 指定插件目录：`tentacle --plugins-dir ./plugins`
 
 use clap::Parser;
@@ -24,13 +25,17 @@ use tracing_subscriber::EnvFilter;
 #[derive(Parser, Debug)]
 #[command(name = "tentacle", version, about = "Helix-Tentacle 工具执行引擎")]
 struct Args {
-    /// 传输模式：stdio 或 http
+    /// 传输模式：stdio、http 或 grpc
     #[arg(long, default_value = "stdio")]
     transport: String,
 
     /// HTTP 监听端口（仅 http 模式）
     #[arg(long, default_value_t = 3000)]
     port: u16,
+
+    /// gRPC 监听端口（仅 grpc 模式）
+    #[arg(long, default_value_t = 50051)]
+    grpc_port: u16,
 
     /// 插件目录（可选，启动时自动扫描）
     #[arg(long)]
@@ -107,10 +112,43 @@ async fn main() {
     match args.transport.as_str() {
         "stdio" => run_stdio(registry),
         "http" => run_http(registry, args.port).await,
+        "grpc" => run_grpc(registry, args.grpc_port).await,
         other => {
-            error!("不支持的传输模式: {}（请使用 stdio 或 http）", other);
+            error!("不支持的传输模式: {}（请使用 stdio、http 或 grpc）", other);
             std::process::exit(1);
         }
+    }
+}
+
+/// gRPC 模式：启动 tonic gRPC 服务器（tentacle.v1 协议，对接 Anaphase-Helix）
+async fn run_grpc(registry: ToolRegistry, port: u16) {
+    use tentacle_transport_grpc::{GrpcState, TentacleGrpcService};
+
+    let state = GrpcState::new(registry);
+    let service = TentacleGrpcService::new(state).into_server();
+
+    let addr = format!("0.0.0.0:{}", port);
+    let addr: std::net::SocketAddr = match addr.parse() {
+        Ok(a) => a,
+        Err(e) => {
+            error!("无效的 gRPC 端口 {}: {}", port, e);
+            std::process::exit(1);
+        }
+    };
+    info!("gRPC 服务器监听: {}", addr);
+    info!("端点:");
+    info!("  ListManifests   — 工具索引");
+    info!("  GetManifest     — 工具说明书");
+    info!("  ExecuteTool     — 执行工具");
+    info!("  ExecuteToolStream — 流式执行");
+
+    if let Err(e) = tonic::transport::Server::builder()
+        .add_service(service)
+        .serve(addr)
+        .await
+    {
+        error!("gRPC 服务器错误: {}", e);
+        std::process::exit(1);
     }
 }
 

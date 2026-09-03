@@ -1,0 +1,19 @@
+{
+  "name": "rate",
+  "version": "1.0.0",
+  "description": "fixture tool returning a numerator/denominator pair (deterministic, MET/UNMET parameterized)",
+  "author": "CommonIntents",
+  "executable": "rate.js",
+  "integrity": {
+    "algorithm": "sha256",
+    "hash": "b396689c09f3cbac967e00d1b79baa4c1d3eeb84e8c93fafa40250fdf449c543"
+  },
+  "parameters_schema": {
+    "type": "object",
+    "properties": {
+      "numerator": { "type": "number", "description": "Optional override. Default: 10." },
+      "denominator": { "type": "number", "description": "Optional override. Default: 20." }
+    }
+  },
+  "security_level": "normal"
+}

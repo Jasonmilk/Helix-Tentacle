@@ -1,0 +1,22 @@
+{
+  "name": "numbers",
+  "version": "1.0.0",
+  "description": "fixture tool returning a numeric series (deterministic, MET/UNMET parameterized)",
+  "author": "CommonIntents",
+  "executable": "numbers.js",
+  "integrity": {
+    "algorithm": "sha256",
+    "hash": "d07e3d842e0e9490137ff884245d57fc48812fedbce264216be524e27222c89a"
+  },
+  "parameters_schema": {
+    "type": "object",
+    "properties": {
+      "series": {
+        "type": "array",
+        "items": { "type": "number" },
+        "description": "Optional override. Default: 20 ascending numbers."
+      }
+    }
+  },
+  "security_level": "normal"
+}

@@ -11,6 +11,8 @@ path = "src/main.rs"
 [dependencies]
 tentacle-core = { path = "../tentacle-core" }
 tentacle-transport-http = { path = "../tentacle-transport-http" }
+tentacle-transport-grpc = { path = "../tentacle-transport-grpc" }
+tonic = "0.12"
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
