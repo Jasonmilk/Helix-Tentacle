@@ -81,3 +81,16 @@
 - HTTP 模式实测：GET /v1/manifest, GET /metrics, POST /v1/tools/test/execute 均正常响应
 **状态**：✅ P5 完成（T1-T3 + T5 全部完成，T4 调整到 P6）
 ---
+
+## 记录 4：M1.5 生态合流 — grpc transport 接线 + fixture 插件（2026-09-06）
+
+- **事件**：M1.5 与 Anaphase 生态合流——`--transport grpc`（默认 --grpc-port 50051）+ fixture 插件 numbers/rate（manifest+js+SHA-256，参数化 MET/UNMET）
+- **关键决策**：
+  - grpc 传输层接入 CLI：`tentacle --transport grpc`，Anaphase pipeline 经真实 gRPC 执行工具（Tentacle 字面零改动约束下新增能力）
+  - fixture 插件参数化：`{1..=10}`（sum=210 超 high=100）与 `{10,10}`（rate cross_check 通过）——满足 Anaphase 判据契约（ADR-0004 决策 2 修正）
+  - seen_entropy_bloom 字段透传（空串→None），消费逻辑留 Anaphase 侧（跨仓库相邻债）
+- **代码实现**：crates/tentacle/src/main.rs（--transport grpc 分支）+ fixtures/{numbers,rate}.{js,manifest.json}（SHA-256 校验）
+- **提交**：d902151
+- **测试**：153 tests 全绿（P5 基线 + M1.5 增量）
+**状态**：🚧 P6 进行中（M1.5 完成；T4 部署文档 + CI-144 全组件联调待做）
+---
