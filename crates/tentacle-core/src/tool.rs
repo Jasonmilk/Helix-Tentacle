@@ -20,7 +20,7 @@ pub struct ExecutionRequest {
     pub identity_labels: HashMap<String, String>,
     #[serde(default)]
     pub trace_id: Option<String>,
-    /// 已见熵布隆过滤器（Callosum 导出，可选；四修正2）
+    /// 已见熵布隆过滤器（本地 bloom feature，可选；四修正2）
     #[serde(default)]
     pub seen_entropy_bloom: Option<String>,
 }

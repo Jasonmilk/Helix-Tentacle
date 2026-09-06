@@ -5,7 +5,7 @@
 //! # 核心能力
 //! - HTTP 请求（IdentityHttpClient，凭证标签流转，四修正1）
 //! - 渐进式觅食（ForagingEvaluator，信息增益评估，边缘价值递减时自动终止）
-//! - 布隆过滤器对接（可选 bloom feature，四修正2，Callosum 导出全局已见熵）
+//! - 布隆过滤器对接（可选 bloom feature，四修正2，本地全局已见熵）
 //! - HTML 解析（简单正则去除标签，提取纯文本）
 //!
 //! # 设计原则
@@ -86,12 +86,12 @@ impl TargetedScraper {
         let mut evaluator = ForagingEvaluator::new(&query, threshold_delta, max_pages);
 
         // 布隆过滤器对接（四修正2，可选 bloom feature）
-        // 注意：布隆过滤器的序列化格式需与 Callosum 对齐，P3-T4 先保留接口，
-        // 完整的序列化/反序列化在 Callosum 接口明确后实现。
+        // 注意：布隆过滤器的序列化格式需与本地 bloom 实现对齐，P3-T4 先保留接口，
+        // 完整的序列化/反序列化在 bloom feature 明确后实现。
         #[cfg(feature = "bloom")]
         {
             if req.seen_entropy_bloom.is_some() {
-                eprintln!("[targeted_scraper] 收到已见熵布隆过滤器，待 Callosum 序列化格式对齐后启用");
+                eprintln!("[targeted_scraper] 收到已见熵布隆过滤器，待 bloom 序列化格式对齐后启用");
             }
         }
 

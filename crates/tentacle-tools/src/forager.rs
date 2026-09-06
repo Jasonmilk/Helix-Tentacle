@@ -53,7 +53,7 @@ pub struct ForagingEvaluator {
     zero_gain_streak: u32,
     /// 连续零增益上限（达到则终止）
     max_zero_gain_streak: u32,
-    /// 全局已见熵布隆过滤器（Callosum 导出，四修正2）
+    /// 全局已见熵布隆过滤器（本地 bloom feature，四修正2）
     ///
     /// 仅在 `bloom` feature 启用时存在。命中布隆的 token 增益计 0
     /// （全局记忆已覆盖，避免重复采集）。未启用时完全零开销。
@@ -83,7 +83,7 @@ impl ForagingEvaluator {
         }
     }
 
-    /// 设置全局已见熵布隆过滤器（四修正2，Callosum 导出）
+    /// 设置全局已见熵布隆过滤器（四修正2，本地 bloom feature）
     ///
     /// 仅在 `bloom` feature 启用时可用。命中布隆的 token 增益计 0。
     #[cfg(feature = "bloom")]
