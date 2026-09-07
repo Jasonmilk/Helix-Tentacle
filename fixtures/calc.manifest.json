@@ -1,0 +1,21 @@
+{
+  "name": "calc",
+  "version": "1.0.0",
+  "description": "safe arithmetic evaluation via python (whitelist-validated, deterministic)",
+  "author": "CommonIntents",
+  "executable": "calc.js",
+  "integrity": {
+    "algorithm": "sha256",
+    "hash": "3f5fc63e1431ed6b1afe616e1445878d74012d922a1c84137816d987d91f364a"
+  },
+  "parameters_schema": {
+    "type": "object",
+    "properties": {
+      "expression": {
+        "type": "string",
+        "description": "Arithmetic expression, e.g. 9**13 (alias: expr)"
+      }
+    }
+  },
+  "security_level": "normal"
+}

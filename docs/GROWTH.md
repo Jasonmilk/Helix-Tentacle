@@ -94,3 +94,8 @@
 - **测试**：153 tests 全绿（P5 基线 + M1.5 增量）
 **状态**：🚧 P6 进行中（M1.5 完成；T4 部署文档 + CI-144 全组件联调待做）
 ---
+
+## [2026-09-07] 插件：calc + web_search
+- calc：白名单算术表达式（`[0-9+\-*/().%^ \t]`），argv 传参（ProcessTool 通道），python3 求值，超长/非法拒绝；SHA-256 校验
+- web_search：Bing HTML 固定端点 + 白名单正则提取 b_algo（title+url），参数 q≤200/max≤8，只读确定性
+- 端到端：Anaphase → gRPC → node 执行 → evidence 回填（7**9=40353607 实测正确）

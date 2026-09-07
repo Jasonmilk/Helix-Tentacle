@@ -1,0 +1,25 @@
+{
+  "name": "web_search",
+  "version": "1.0.0",
+  "description": "web search via Bing HTML endpoint, top-N results (deterministic, read-only)",
+  "author": "CommonIntents",
+  "executable": "web_search.js",
+  "integrity": {
+    "algorithm": "sha256",
+    "hash": "ee8f7665cce6f18140a59b804766a07c6aa9fc86c47129f9d73b19e1dd0f0931"
+  },
+  "parameters_schema": {
+    "type": "object",
+    "properties": {
+      "q": {
+        "type": "string",
+        "description": "search query"
+      },
+      "max": {
+        "type": "number",
+        "description": "max results (default 5, cap 8)"
+      }
+    }
+  },
+  "security_level": "normal"
+}
