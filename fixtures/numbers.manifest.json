@@ -13,10 +13,15 @@
     "properties": {
       "series": {
         "type": "array",
-        "items": { "type": "number" },
+        "items": {
+          "type": "number"
+        },
         "description": "Optional override. Default: 20 ascending numbers."
       }
     }
   },
-  "security_level": "normal"
+  "security_level": "normal",
+  "tags": [
+    "fixture"
+  ]
 }

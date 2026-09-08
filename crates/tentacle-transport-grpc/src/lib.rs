@@ -70,7 +70,24 @@ impl TentacleService for TentacleGrpcService {
     ) -> Result<Response<ListManifestsResponse>, Status> {
         let registry = self.state.registry.lock().await;
         let index = registry.index();
-        let manifests = index.into_iter().map(manifest_index_to_proto).collect();
+        let manifests = index
+            .into_iter()
+            .map(|idx| {
+                // parameter_names from the full manifest schema — the tool
+                // schema is the single source of truth for call shapes
+                // (2026-09-09: models must not guess parameter names).
+                let params = registry
+                    .get_manifest(&idx.name)
+                    .and_then(|m| m.parameters_schema.get("properties").and_then(|p| p.as_object()))
+                    .map(|props| props.keys().cloned().collect())
+                    .unwrap_or_default();
+                let tags = registry
+                    .get_manifest(&idx.name)
+                    .map(|m| m.tags.clone())
+                    .unwrap_or_default();
+                manifest_index_to_proto_with_params(idx, params, tags)
+            })
+            .collect();
         Ok(Response::new(ListManifestsResponse { manifests }))
     }
 
@@ -189,11 +206,21 @@ impl TentacleService for TentacleGrpcService {
 // === 类型转换函数 ===
 
 fn manifest_index_to_proto(index: ManifestIndex) -> proto::ManifestIndex {
+    manifest_index_to_proto_with_params(index, Vec::new(), Vec::new())
+}
+
+fn manifest_index_to_proto_with_params(
+    index: ManifestIndex,
+    parameter_names: Vec<String>,
+    tags: Vec<String>,
+) -> proto::ManifestIndex {
     proto::ManifestIndex {
         name: index.name,
         description: index.description,
         version: index.version,
         security_level: security_level_to_string(index.security_level),
+        parameter_names,
+        tags,
     }
 }
 

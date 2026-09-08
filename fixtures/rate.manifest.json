@@ -11,9 +11,18 @@
   "parameters_schema": {
     "type": "object",
     "properties": {
-      "numerator": { "type": "number", "description": "Optional override. Default: 10." },
-      "denominator": { "type": "number", "description": "Optional override. Default: 20." }
+      "numerator": {
+        "type": "number",
+        "description": "Optional override. Default: 10."
+      },
+      "denominator": {
+        "type": "number",
+        "description": "Optional override. Default: 20."
+      }
     }
   },
-  "security_level": "normal"
+  "security_level": "normal",
+  "tags": [
+    "fixture"
+  ]
 }

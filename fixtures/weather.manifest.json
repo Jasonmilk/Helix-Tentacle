@@ -1,0 +1,24 @@
+{
+  "name": "weather",
+  "version": "1.0.0",
+  "description": "current + today weather via wttr.in (free, zero-key, trimmed output, deterministic)",
+  "author": "CommonIntents",
+  "executable": "weather.js",
+  "integrity": {
+    "algorithm": "sha256",
+    "hash": "5deaf0e95209479499f7888bc78a3f77ae147b9265085433e477b5cec8baae16"
+  },
+  "parameters_schema": {
+    "type": "object",
+    "properties": {
+      "city": {
+        "type": "string",
+        "description": "city name, e.g. Beijing, Shanghai, Tokyo (alias: q)"
+      }
+    }
+  },
+  "security_level": "normal",
+  "tags": [
+    "fixture"
+  ]
+}

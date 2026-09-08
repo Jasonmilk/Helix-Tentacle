@@ -37,6 +37,8 @@ message ManifestIndex {
   string description = 2;
   string version = 3;
   string security_level = 4; // normal / elevated / critical
+  repeated string parameter_names = 5; // schema keys (唯一事实源, 2026-09-09)
+  repeated string tags = 6; // source classification: fixture / mcp (2026-09-09)
 }
 
 message GetManifestRequest {

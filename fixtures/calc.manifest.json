@@ -17,5 +17,8 @@
       }
     }
   },
-  "security_level": "normal"
+  "security_level": "normal",
+  "tags": [
+    "fixture"
+  ]
 }
