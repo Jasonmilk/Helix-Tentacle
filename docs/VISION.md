@@ -1,4 +1,5 @@
 # Helix-Tentacle 愿景索引
+> © 2026 Jason Milk · Apache 2.0
 > **版本**：v1.0
 > **日期**：2026-08-28
 > **继承自**：Tentacle 工程白皮书 v3.4（设计定案）+ phyt-DNA v1.0（方法论锚点项目 https://github.com/Jasonmilk/phyt-DNA）

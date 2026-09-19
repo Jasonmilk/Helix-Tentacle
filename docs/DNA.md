@@ -1,4 +1,5 @@
 # Helix-Tentacle DNA — 不可变原则与自生长流程
+> © 2026 Jason Milk · Apache 2.0
 > **版本**：v1.0
 > **日期**：2026-08-28
 > **继承自**：phyt-DNA v1.0（机制复用，方法论锚点项目 https://github.com/Jasonmilk/phyt-DNA）、Helix-Tentacle VISION.md v1.0（哲学内容源）、工程白皮书 v3.4
