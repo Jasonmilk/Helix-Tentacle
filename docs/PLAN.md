@@ -107,6 +107,7 @@
 | 四修正 | ADR-0001（全部✅，P3-T2 升级 worker 池） |
 | 白皮书 | `docs/SPEC.md` + `docs/spec/*.md`（5 分卷） |
 | 觅食设计 | 白皮书 §3.4（ForagingEvaluator，P2-T1 已实现） |
+| forager 接线状态 | **已实现、未接线**（2026-09-16 审计）：`ForagingEvaluator`（Jaccard/TF-IDF 信息增益 + bloom 已见熵）与 `targeted_scraper` 位于 `crates/tentacle-tools`，但主 bin `crates/tentacle` 不依赖 tentacle-tools ⇒ 写了没接线。原因：P0 是让现有 web_search 的外部依赖可用（零 key Bing HTML 实测可用）；接线是 P3 优化项（增量提炼搜索策略），不是"能不能搜"。接线前必须先决定 key 端点与 forager 的输入源（当前 web_search 是 curl+正则直出，无 forager 接入点）。 |
 | 沙箱设计 | 白皮书 §6.3（WASM epoch_deadline + JS 协变中断，P2-T3/T4 已实现） |
 | WASI 细化 | P3-T1（wasmtime-wasi v26 preview1 API） |
 | worker 池 | P3-T2（固定 worker 池 + 多 context 单线程协程调度） |
@@ -121,6 +122,7 @@
 | STDIO 传输层 | P5-T5（P5 收尾项，echo JSON → 执行 → 输出结果，零配置本地使用） |
 | 生态对齐 | Anaphase-Helix gRPC 契约 + Helix-Mind 认知工艺 + Callosum 布隆导出 |
 | Tuck 边界 | 明文凭证永不在 Tentacle 内存，Tuck 物理边缘注入 |
+| ProcessTool cfg 硬编码 | **待办**（0 硬编码违例，2026-09-16 审计）：`crates/tentacle/src/main.rs:319` 把 ProcessTool 的 cfg 参数硬编码为 `"{}"`。当前无消费者（fixture 插件不读 cfg），按用户裁决"没有消费者的注入点不是能力，是负债"入待办不阻塞；接入 key 端点时改由传输层注入。 |
 | CI-144 v2.0 | PFP-xCF14 + SAP-xCF14 已冻结，P6 接入（不阻塞 P5） |
 
 ---

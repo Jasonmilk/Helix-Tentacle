@@ -98,8 +98,21 @@ cargo test -p tentacle-integration-tests
 # run performance benchmarks
 cargo bench --package tentacle-benchmarks
 
-# build (enable features on demand)
-cargo build --release --features runtime,scraper,bloom
+# build the main binary (workspace root; the main bin needs no feature flags —
+# fixture plugins are executed out-of-process via `node`, see crates/tentacle)
+cargo build --release
+
+# build the tool-kit crate WITH its optional features (forager / scraper /
+# bloom live in crates/tentacle-tools, not in the main bin):
+#   bloom  = seen-entropy Bloom filter for the forager
+#   js     = JS tool execution inside tentacle-tools (experimental)
+#   wasm   = WASM tool execution inside tentacle-tools (experimental)
+#   scraper= HTTP client + targeted scraper + progressive foraging
+# NOTE (2026-09-16): the main `tentacle` binary does NOT depend on
+# tentacle-tools, so `--features runtime,scraper,bloom` at the workspace root
+# only affects crates that actually declare them. The fixtures in ./fixtures/
+# are executed as external `node` processes and need none of these features.
+cargo build --release -p tentacle-tools --features runtime,scraper,bloom
 
 # STDIO mode (zero-config local use)
 echo '{"tool":"mock","params":{"input":"test"}}' | ./target/release/tentacle
